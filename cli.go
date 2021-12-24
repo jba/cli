@@ -1,5 +1,8 @@
 // Copyright 2021 Jonathan Amsterdam.
 
+// TODO:
+// `oneof=a|b` parses as doc, not oneof
+
 package cli
 
 import (
@@ -52,16 +55,20 @@ func Register(name string, c Command, doc string) {
 	if findCmd(name) != nil {
 		panic(fmt.Sprintf("duplicate command: %q", name))
 	}
-	cmd := &Cmd{
+	cmd := newCmd(name, c, doc)
+	if err := cmd.processFields(c); err != nil {
+		panic(err)
+	}
+	cmds = append(cmds, cmd)
+}
+
+func newCmd(name string, c Command, doc string) *Cmd {
+	return &Cmd{
 		name:  name,
 		c:     c,
 		doc:   doc,
 		flags: flag.NewFlagSet(name, flag.ExitOnError),
 	}
-	if err := cmd.processFields(c); err != nil {
-		panic(err)
-	}
-	cmds = append(cmds, cmd)
 }
 
 type formal struct {
@@ -194,7 +201,7 @@ func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parse
 		for i, p := range parts {
 			el, err := elp(p)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%q: %v", p, err)
 			}
 			slice.Index(i).Set(reflect.ValueOf(el))
 		}
@@ -207,6 +214,7 @@ var durationType = reflect.TypeOf(time.Duration(0))
 // scalar types only
 func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
 	if oneof, ok := tagMap["oneof"]; ok {
+		fmt.Println("oneof")
 		if oneof == "" {
 			return nil, errors.New("empty oneof")
 		}
@@ -332,9 +340,7 @@ func (c *Cmd) bindArgs(args []string) error {
 // The found result reports whether sep appears in s.
 // If sep does not appear in s, cut returns s, "", false.
 //
-// https://golang.org/issue/46336 is an accepted proposal to add this to the
-// standard library. It will presumably land in Go 1.18, so this can be removed
-// when pkgsite moves to that version.
+// TODO: remove when go1.18 is out.
 func stringsCut(s, sep string) (before, after string, found bool) {
 	if i := strings.Index(s, sep); i >= 0 {
 		return s[:i], s[i+len(sep):], true

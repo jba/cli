@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -86,4 +87,26 @@ func TestParseTag(t *testing.T) {
 	// 	}
 	// }
 
+}
+
+func TestProcessFieldsErrors(t *testing.T) {
+	check := func(s interface{}, want string) {
+		t.Helper()
+		got := newCmd("", nil, "").processFields(s)
+		if got == nil || !strings.Contains(got.Error(), want) {
+			t.Errorf("got %v, want error containing %q", got, want)
+		}
+	}
+
+	// oneof for non-string field
+	type t1 struct {
+		F int `cli:"oneof=a|b,doc"`
+	}
+	check(&t1{}, "must be string")
+
+	// tag on unexported field
+	type t2 struct {
+		f int `cli:"foo"`
+	}
+	check(&t2{}, "tag on unexported")
 }
