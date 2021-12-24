@@ -94,6 +94,11 @@ func (c *Cmd) processFields(x interface{}) error {
 			return fmt.Errorf("command %q, field %q: %v", c.name, f.Name, err)
 		}
 	}
+	for i, f := range c.formals {
+		if f.min >= 0 && i != len(c.formals)-1 {
+			return fmt.Errorf("%q is a slice but not the last arg", f.name)
+		}
+	}
 	return nil
 }
 
@@ -124,6 +129,7 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		return err
 	}
 	if fname, ok := m["flag"]; ok {
+		// flag
 		if fname == "" {
 			fname = strings.ToLower(sf.Name)
 		}
@@ -141,6 +147,7 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 			})
 		}
 	} else {
+		// positional arg
 		name := m["name"]
 		if name == "" {
 			name = strings.ToLower(sf.Name)
@@ -151,6 +158,9 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 			doc:    m["doc"],
 			min:    -1,
 			parser: parser,
+		}
+		if sf.Type.Kind() == reflect.Slice {
+			f.min = 0
 		}
 		c.formals = append(c.formals, f)
 	}
@@ -191,6 +201,7 @@ func buildParser(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
 		if _, isFlag := tagMap["flag"]; isFlag {
 			return parserForSlice(t, tagMap, ",")
 		}
+		return parserForType(t.Elem(), tagMap)
 	}
 	return parserForType(t, tagMap)
 }
@@ -330,11 +341,28 @@ func (c *Cmd) bindArgs(args []string) error {
 		}
 	}
 	for i, f := range c.formals {
-		v, err := f.parser(c.flags.Arg(i))
-		if err != nil {
-			return fmt.Errorf("%s: %v", f.name, err)
+		if f.min >= 0 {
+			// We've already checked that this is the last formal.
+			nArgsLeft := c.flags.NArg() - i
+			if nArgsLeft < f.min {
+				return fmt.Errorf("%s: need at least %d args, got %d", f.name, f.min, nArgsLeft)
+			}
+			slice := reflect.MakeSlice(f.field.Type(), 0, nArgsLeft)
+			for j := i; j < c.flags.NArg(); j++ {
+				v, err := f.parser(c.flags.Arg(j))
+				if err != nil {
+					return fmt.Errorf("%s: %v", f.name, err)
+				}
+				slice = reflect.Append(slice, reflect.ValueOf(v))
+			}
+			f.field.Set(slice)
+		} else {
+			v, err := f.parser(c.flags.Arg(i))
+			if err != nil {
+				return fmt.Errorf("%s: %v", f.name, err)
+			}
+			f.field.Set(reflect.ValueOf(v))
 		}
-		f.field.Set(reflect.ValueOf(v))
 	}
 
 	return nil

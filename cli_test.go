@@ -113,4 +113,11 @@ func TestProcessFieldsErrors(t *testing.T) {
 		f int `cli:"foo"`
 	}
 	check(&t2{}, "tag on unexported")
+
+	// slice is not last
+	type t3 struct {
+		A []int `cli:"doc"`
+		B bool  `cli:"doc"`
+	}
+	check(&t3{}, "last")
 }
