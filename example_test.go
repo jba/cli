@@ -18,6 +18,7 @@ type show struct {
 	Verbose bool    `cli:"flag=v,more detail"`
 	Bun     Bool    `cli:"flag=, demo underlying bool"`
 	Limit   int     `cli:"flag=limit , max to show"`
+	Nums    []int   `cli:"flag=nums, some numbers"`
 	ID      string  `cli:"identifier of value to show"`
 	F       float64 `cli:"name=flo, a float value"`
 }
@@ -35,12 +36,13 @@ func (c *show) Run(ctx context.Context) error {
 		fmt.Println("bun is true")
 	}
 	fmt.Printf("limit = %d\n", c.Limit)
+	fmt.Printf("nums = %v\n", c.Nums)
 	return nil
 }
 
 func Example() {
 	err := cli.Run(context.Background(), []string{
-		"show", "-v", "-bun", "-limit", "8", "abc", "3.2"})
+		"show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "abc", "3.2"})
 	if err != nil {
 		fmt.Printf("Error: %v", err)
 	}
@@ -50,4 +52,5 @@ func Example() {
 	// verbosely
 	// bun is true
 	// limit = 8
+	// nums = [1 2 3]
 }

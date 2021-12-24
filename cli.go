@@ -82,8 +82,11 @@ func (c *Cmd) processFields(x interface{}) error {
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		tag := f.Tag.Get("cli")
-		if err := c.parseTag(tag, f.Name, v.Field(i)); err != nil {
-			return fmt.Errorf("command %s, field %s: %v", c.name, f.Name, err)
+		if tag == "" {
+			continue
+		}
+		if err := c.parseTag(tag, f, v.Field(i)); err != nil {
+			return fmt.Errorf("command %q, field %q: %v", c.name, f.Name, err)
 		}
 	}
 	return nil
@@ -97,7 +100,10 @@ func (c *Cmd) processFields(x interface{}) error {
 // - oneof=a|b|c, which which validate that the arg is one of those strings.
 // A full example:
 //   Env `cli:"name=env oneof=dev|prod  development environment"`
-func (c *Cmd) parseTag(tag, fieldName string, field reflect.Value) error {
+func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) error {
+	if !sf.IsExported() {
+		return errors.New("cli tag on unexported field")
+	}
 	m := tagToMap(tag)
 	for k := range m {
 		if k == "" {
@@ -107,26 +113,14 @@ func (c *Cmd) parseTag(tag, fieldName string, field reflect.Value) error {
 	if m["flag"] != "" && m["name"] != "" {
 		return errors.New("either 'flag' or 'name', but not both")
 	}
-	parser, err := parserForType(field.Type())
+
+	parser, err := buildParser(field.Type(), m)
 	if err != nil {
 		return err
 	}
-	if of, ok := m["oneof"]; ok {
-		if of == "" {
-			return errors.New("empty value for oneof")
-		}
-		op := parserForOneof(strings.Split(of, "|"))
-		parser = func(s string) (interface{}, error) {
-			x, err := op(s)
-			if err != nil {
-				return nil, err
-			}
-			return parser(x.(string))
-		}
-	}
 	if fname, ok := m["flag"]; ok {
 		if fname == "" {
-			fname = strings.ToLower(fieldName)
+			fname = strings.ToLower(sf.Name)
 		}
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
@@ -144,7 +138,7 @@ func (c *Cmd) parseTag(tag, fieldName string, field reflect.Value) error {
 	} else {
 		name := m["name"]
 		if name == "" {
-			name = strings.ToLower(fieldName)
+			name = strings.ToLower(sf.Name)
 		}
 		f := &formal{
 			name:   name,
@@ -180,20 +174,47 @@ func tagToMap(tag string) map[string]string {
 
 type parseFunc func(string) (interface{}, error)
 
-func parserForOneof(choices []string) parseFunc {
-	return func(s string) (interface{}, error) {
-		for _, c := range choices {
-			if s == c {
-				return c, nil
-			}
+func buildParser(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
+	if t.Kind() == reflect.Slice {
+		if _, isFlag := tagMap["flag"]; isFlag {
+			return parserForSlice(t, tagMap, ",")
 		}
-		return nil, fmt.Errorf("must be one of: %s", strings.Join(choices, ", "))
 	}
+	return parserForType(t, tagMap)
+}
+
+func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parseFunc, error) {
+	elp, err := parserForType(t.Elem(), tagMap)
+	if err != nil {
+		return nil, err
+	}
+	return func(s string) (interface{}, error) {
+		parts := strings.Split(s, sep)
+		slice := reflect.MakeSlice(t, len(parts), len(parts))
+		for i, p := range parts {
+			el, err := elp(p)
+			if err != nil {
+				return nil, err
+			}
+			slice.Index(i).Set(reflect.ValueOf(el))
+		}
+		return slice.Interface(), nil
+	}, nil
 }
 
 var durationType = reflect.TypeOf(time.Duration(0))
 
-func parserForType(t reflect.Type) (parseFunc, error) {
+// scalar types only
+func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
+	if oneof, ok := tagMap["oneof"]; ok {
+		if oneof == "" {
+			return nil, errors.New("empty oneof")
+		}
+		if t.Kind() != reflect.String {
+			return nil, fmt.Errorf("oneof must be string type, not %s", t)
+		}
+		return parserForOneof(strings.Split(oneof, "|")), nil
+	}
 	if t == durationType {
 		return func(s string) (interface{}, error) {
 			return time.ParseDuration(s)
@@ -243,6 +264,17 @@ func parserForType(t reflect.Type) (parseFunc, error) {
 		}, nil
 	default:
 		return nil, fmt.Errorf("cannot parse string into %s", t)
+	}
+}
+
+func parserForOneof(choices []string) parseFunc {
+	return func(s string) (interface{}, error) {
+		for _, c := range choices {
+			if s == c {
+				return c, nil
+			}
+		}
+		return nil, fmt.Errorf("must be one of: %s", strings.Join(choices, ", "))
 	}
 }
 
