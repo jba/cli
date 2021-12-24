@@ -1,8 +1,5 @@
 // Copyright 2021 Jonathan Amsterdam.
 
-// TODO:
-// `oneof=a|b` parses as doc, not oneof
-
 package cli
 
 import (
@@ -12,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -159,22 +157,29 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 	return nil
 }
 
+var keyRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]+=`)
+
 func tagToMap(tag string) map[string]string {
 	m := map[string]string{}
 	tag = strings.TrimSpace(tag)
 	for len(tag) > 0 {
+		loc := keyRegexp.FindStringIndex(tag)
+		if loc == nil {
+			m["doc"] = tag
+			break
+		}
+		key := tag[:loc[1]-1]
+		tag = tag[loc[1]:]
 		before, after, found := stringsCut(tag, ",")
+		var value string
 		if !found {
-			m["doc"] = tag
-			break
+			value = tag
+			tag = ""
+		} else {
+			value = before
+			tag = strings.TrimSpace(after)
 		}
-		bef, aft, found := stringsCut(before, "=")
-		if !found {
-			m["doc"] = tag
-			break
-		}
-		m[strings.TrimSpace(bef)] = strings.TrimSpace(aft)
-		tag = strings.TrimSpace(after)
+		m[key] = strings.TrimSpace(value)
 	}
 	return m
 }

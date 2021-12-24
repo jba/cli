@@ -23,6 +23,10 @@ func TestTagToMap(t *testing.T) {
 				"doc":  "some doc",
 			},
 		},
+		{
+			"oneof=a|b",
+			map[string]string{"oneof": "a|b"},
+		},
 	} {
 		got := tagToMap(test.tag)
 		if !cmp.Equal(got, test.want) {
@@ -100,7 +104,7 @@ func TestProcessFieldsErrors(t *testing.T) {
 
 	// oneof for non-string field
 	type t1 struct {
-		F int `cli:"oneof=a|b,doc"`
+		F int `cli:"oneof=a|b"`
 	}
 	check(&t1{}, "must be string")
 
