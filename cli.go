@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"regexp"
@@ -25,12 +26,26 @@ type Cmd struct {
 	c       Command
 	doc     string
 	flags   *flag.FlagSet
+	nFlags  int
 	formals []*formal
 	subs    []*Cmd
 }
 
 func (c *Cmd) Register(name string, co Command) {
 	panic("unimp")
+}
+
+func Register(name string, c Command, doc string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if findCmd(name) != nil {
+		panic(fmt.Sprintf("duplicate command: %q", name))
+	}
+	cmd := newCmd(name, c, doc)
+	if err := cmd.processFields(c); err != nil {
+		panic(err)
+	}
+	cmds = append(cmds, cmd)
 }
 
 var (
@@ -47,17 +62,50 @@ func findCmd(name string) *Cmd {
 	return nil
 }
 
-func Register(name string, c Command, doc string) {
+func Main() {
+	if err := Run(context.Background(), os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func Run(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("no args")
+	}
+	c := findCmd(args[0])
+	if c == nil {
+		return fmt.Errorf("unknown command: %q", args[0])
+	}
+	return c.run(ctx, args[1:])
+}
+
+func Usage(w io.Writer) {
 	mu.Lock()
-	defer mu.Unlock()
-	if findCmd(name) != nil {
-		panic(fmt.Sprintf("duplicate command: %q", name))
+	cs := cmds
+	mu.Unlock()
+	for _, c := range cs {
+		fmt.Fprintf(w, "%s", c.name)
+		if c.nFlags > 0 {
+			fmt.Fprint(w, " [flags]")
+		}
+		for _, f := range c.formals {
+			fmt.Fprintf(w, " %s", f.name)
+			if f.min >= 0 {
+				fmt.Fprint(w, "...")
+			}
+		}
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "  %s\n", c.doc)
+
+		for _, f := range c.formals {
+			fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+		}
+		c.flags.SetOutput(w)
+		c.flags.PrintDefaults()
+		fmt.Fprintln(w)
 	}
-	cmd := newCmd(name, c, doc)
-	if err := cmd.processFields(c); err != nil {
-		panic(err)
-	}
-	cmds = append(cmds, cmd)
+
 }
 
 func newCmd(name string, c Command, doc string) *Cmd {
@@ -133,6 +181,7 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		if fname == "" {
 			fname = strings.ToLower(sf.Name)
 		}
+		c.nFlags++
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
 			c.flags.BoolVar(ptr, fname, *ptr, m["doc"])
@@ -379,22 +428,4 @@ func stringsCut(s, sep string) (before, after string, found bool) {
 		return s[:i], s[i+len(sep):], true
 	}
 	return s, "", false
-}
-
-func Main() {
-	if err := Run(context.Background(), os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func Run(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return errors.New("no args")
-	}
-	c := findCmd(args[0])
-	if c == nil {
-		return fmt.Errorf("unknown command: %q", args[0])
-	}
-	return c.run(ctx, args[1:])
 }

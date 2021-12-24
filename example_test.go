@@ -5,6 +5,7 @@ package cli_test
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/jba/cli"
 )
@@ -21,7 +22,7 @@ type show struct {
 	Nums    []int     `cli:"flag=nums, some numbers"`
 	Envs    []string  `cli:"flag=,oneof=d|s|p, environments"`
 	ID      string    `cli:"identifier of value to show"`
-	Floats  []float64 `cli:"name=flo, float values"`
+	Floats  []float64 `cli:"name=numbers, float values"`
 }
 
 func init() {
@@ -43,6 +44,8 @@ func (c *show) Run(ctx context.Context) error {
 }
 
 func Example() {
+	cli.Usage(os.Stderr)
+
 	err := cli.Run(context.Background(), []string{
 		"show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4"})
 	if err != nil {
