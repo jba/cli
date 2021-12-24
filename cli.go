@@ -1,5 +1,12 @@
 // Copyright 2021 Jonathan Amsterdam.
 
+//TODO:
+// global flag.Usage
+// print global flags in Usage
+// trim whitespace from command doc
+// distinguish -h,-help and exit 0
+// sub-commands
+
 package cli
 
 import (
@@ -9,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -28,33 +36,35 @@ type Cmd struct {
 	flags   *flag.FlagSet
 	nFlags  int
 	formals []*formal
+	mu      sync.Mutex
 	subs    []*Cmd
 }
 
-func (c *Cmd) Register(name string, co Command) {
-	panic("unimp")
+var topCmd *Cmd = &Cmd{
+	name:  filepath.Base(os.Args[0]),
+	flags: flag.CommandLine,
+}
+
+func (c *Cmd) Register(name string, co Command, doc string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.find(name) != nil {
+		panic(fmt.Sprintf("duplicate command: %q", name))
+	}
+	cmd := newCmd(name, co, doc)
+	if err := cmd.processFields(co); err != nil {
+		panic(err)
+	}
+	c.subs = append(c.subs, cmd)
 }
 
 func Register(name string, c Command, doc string) {
-	mu.Lock()
-	defer mu.Unlock()
-	if findCmd(name) != nil {
-		panic(fmt.Sprintf("duplicate command: %q", name))
-	}
-	cmd := newCmd(name, c, doc)
-	if err := cmd.processFields(c); err != nil {
-		panic(err)
-	}
-	cmds = append(cmds, cmd)
+	topCmd.Register(name, c, doc)
 }
 
-var (
-	mu   sync.Mutex
-	cmds []*Cmd
-)
-
-func findCmd(name string) *Cmd {
-	for _, c := range cmds {
+// c.mu should be held.
+func (c *Cmd) find(name string) *Cmd {
+	for _, c := range c.subs {
 		if c.name == name {
 			return c
 		}
@@ -63,58 +73,89 @@ func findCmd(name string) *Cmd {
 }
 
 func Main() {
-	if err := Run(context.Background(), os.Args[1:]); err != nil {
+	flag.Usage = func() {
+		Usage(flag.CommandLine.Output())
+	}
+	flag.Parse()
+	Run(context.Background(), os.Args[1:])
+}
+
+func Run(ctx context.Context, args []string) {
+	if len(args) == 0 {
+		Usage(os.Stderr)
+		os.Exit(2)
+	}
+	topCmd.mu.Lock()
+	c := topCmd.find(args[0])
+	topCmd.mu.Unlock()
+	if c == nil {
+		fmt.Fprintf(os.Stderr, "unknown command: %q\n", args[0])
+		Usage(os.Stderr)
+		os.Exit(2)
+	}
+	if err := c.run(ctx, args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		var uerr *UsageError
+		if errors.As(err, &uerr) {
+			c.flags.Usage()
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }
 
-func Run(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return errors.New("no args")
+func Usage(w io.Writer) {
+	fmt.Fprintf(w, "Usage of %s:\n", topCmd.name)
+	topCmd.mu.Lock()
+	cs := topCmd.subs
+	topCmd.mu.Unlock()
+	for _, c := range cs {
+		c.usage(w, false)
 	}
-	c := findCmd(args[0])
-	if c == nil {
-		return fmt.Errorf("unknown command: %q", args[0])
-	}
-	return c.run(ctx, args[1:])
 }
 
-func Usage(w io.Writer) {
-	mu.Lock()
-	cs := cmds
-	mu.Unlock()
-	for _, c := range cs {
-		fmt.Fprintf(w, "%s", c.name)
-		if c.nFlags > 0 {
-			fmt.Fprint(w, " [flags]")
-		}
-		for _, f := range c.formals {
-			fmt.Fprintf(w, " %s", f.name)
-			if f.min >= 0 {
-				fmt.Fprint(w, "...")
-			}
-		}
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "  %s\n", c.doc)
-
-		for _, f := range c.formals {
-			fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
-		}
-		c.flags.SetOutput(w)
-		c.flags.PrintDefaults()
-		fmt.Fprintln(w)
+func (c *Cmd) usage(w io.Writer, single bool) {
+	h := c.usageHeader()
+	if single && len(h)+len(c.doc) <= 76 {
+		fmt.Fprintf(w, "%s    %s\n", h, c.doc)
+	} else {
+		fmt.Fprintf(w, "%s\n  %s\n", h, c.doc)
 	}
+	for _, f := range c.formals {
+		fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+	}
+	c.flags.SetOutput(w)
+	c.flags.PrintDefaults()
+	fmt.Fprintln(w)
+}
 
+func (c *Cmd) usageHeader() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s", c.name)
+	if c.nFlags > 0 {
+		fmt.Fprint(&b, " [flags]")
+	}
+	for _, f := range c.formals {
+		fmt.Fprintf(&b, " %s", f.name)
+		if f.min >= 0 {
+			fmt.Fprint(&b, "...")
+		}
+	}
+	return b.String()
 }
 
 func newCmd(name string, c Command, doc string) *Cmd {
-	return &Cmd{
+	cmd := &Cmd{
 		name:  name,
 		c:     c,
 		doc:   doc,
 		flags: flag.NewFlagSet(name, flag.ExitOnError),
 	}
+	cmd.flags.Usage = func() {
+		fmt.Fprintln(cmd.flags.Output(), "Usage:")
+		cmd.usage(cmd.flags.Output(), true)
+	}
+	return cmd
 }
 
 type formal struct {
@@ -199,7 +240,7 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		// positional arg
 		name := m["name"]
 		if name == "" {
-			name = strings.ToLower(sf.Name)
+			name = strings.ToUpper(sf.Name)
 		}
 		f := &formal{
 			name:   name,
@@ -351,21 +392,25 @@ func parserForOneof(choices []string) parseFunc {
 	}
 }
 
-type usageError struct {
+// UsageError is an error in how the command is invoked.
+// If returned from Command.Run, then the usage message for
+// the command will be printed in addition to the underlying error,
+// and the process will exit with code 2.
+type UsageError struct {
 	err error
 }
 
-func (u *usageError) Error() string {
+func (u *UsageError) Error() string {
 	return u.err.Error()
 }
 
-func (u *usageError) Unwrap() error {
+func (u *UsageError) Unwrap() error {
 	return u.err
 }
 
 func (c *Cmd) run(ctx context.Context, args []string) error {
 	if err := c.bindArgs(args); err != nil {
-		return &usageError{err}
+		return &UsageError{err}
 	}
 	return c.c.Run(ctx)
 }
@@ -376,17 +421,20 @@ func (c *Cmd) bindArgs(args []string) error {
 	nargs := c.flags.NArg()
 	if len(c.formals) == 0 {
 		if nargs > 0 {
-			return &usageError{errors.New("too many args")}
+			return &UsageError{errors.New("too many args")}
 		}
 	} else {
 		min := c.formals[len(c.formals)-1].min
 		if min == -1 {
 			// no rest arg
-			if nargs != len(c.formals) {
-				return &usageError{errors.New("wrong number of args")}
+			if nargs < len(c.formals) {
+				return &UsageError{errors.New("too few args")}
+			}
+			if nargs > len(c.formals) {
+				return &UsageError{errors.New("too many args")}
 			}
 		} else if nargs < len(c.formals)-1+min {
-			return &usageError{errors.New("too few args")}
+			return &UsageError{errors.New("too few args")}
 		}
 	}
 	for i, f := range c.formals {

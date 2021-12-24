@@ -46,11 +46,8 @@ func (c *show) Run(ctx context.Context) error {
 func Example() {
 	cli.Usage(os.Stderr)
 
-	err := cli.Run(context.Background(), []string{
+	cli.Run(context.Background(), []string{
 		"show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4"})
-	if err != nil {
-		fmt.Printf("Error: %v", err)
-	}
 
 	// Output:
 	// showing abc, [3.2 -4]
