@@ -4,6 +4,7 @@ package cli_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jba/cli"
@@ -44,8 +45,7 @@ func (c *show) Run(ctx context.Context) error {
 }
 
 func Example_show() {
-	cli.Run(context.Background(), []string{
-		"show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4"})
+	cli.RunTest("show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4")
 
 	// Output:
 	// showing abc, [3.2 -4]
@@ -70,11 +70,53 @@ func (x *opts) Run(ctx context.Context) error {
 func Example_opts() {
 	c := &opts{}
 	cli.Register("opts", c, "optional args")
-	cli.Run(context.Background(), []string{"opts", "req", "o1", "o2"})
+	cli.RunTest("opts", "req", "o1", "o2")
 	*c = opts{}
-	cli.Run(context.Background(), []string{"opts", "req"})
+	cli.RunTest("opts", "req")
 
 	// Output:
 	// &{Req:req Opt1:o1 Opt2:o2}
 	// &{Req:req Opt1: Opt2:}
+}
+
+type subs struct {
+	F int `flag=, a flag`
+}
+
+type subs_a struct {
+	A int
+}
+
+type subs_b struct {
+	B int
+}
+
+var subsCmd *cli.Cmd
+
+func init() {
+	subsCmd = cli.Register("subs", &subs{}, "subs")
+	subsCmd.Register("a", &subs_a{}, "do a to subs")
+	subsCmd.Register("b", &subs_b{}, "do b to subs")
+}
+
+func (s *subs) Run(ctx context.Context) error {
+	return errors.New("this is a group")
+}
+func (s *subs_a) Run(ctx context.Context) error {
+	fmt.Println("a", s)
+	return nil
+}
+
+func (s *subs_b) Run(ctx context.Context) error {
+	fmt.Println("b", s)
+	return nil
+}
+
+func Example_subs() {
+	cli.RunTest("subs", "a", "3")
+	cli.RunTest("subs", "b", "2")
+
+	// Output:
+	// a &{3}
+	// b &{2}
 }
