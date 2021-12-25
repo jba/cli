@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -120,4 +121,141 @@ func TestProcessFieldsErrors(t *testing.T) {
 		B bool  `cli:"doc"`
 	}
 	check(&t3{}, "last")
+}
+
+func TestBindFormals(t *testing.T) {
+	var f1, f2, f3 string
+	var r []string
+	parser := func(s string) (interface{}, error) { return s, nil }
+
+	form := func(p *string, opt bool) *formal {
+		return &formal{min: -1, opt: opt, parser: parser, field: reflect.ValueOf(p).Elem()}
+	}
+	req := func(p *string) *formal { return form(p, false) }
+	opt := func(p *string) *formal { return form(p, true) }
+	rest := func(min int, p *[]string) *formal {
+		return &formal{name: "r", min: min, parser: parser, field: reflect.ValueOf(p).Elem()}
+	}
+
+	for _, test := range []struct {
+		name    string
+		formals []*formal
+		args    []string
+		want    func() bool
+		wantErr string
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name:    "required",
+			formals: []*formal{req(&f1), req(&f2)},
+			args:    []string{"a", "b"},
+			want:    func() bool { return f1 == "a" && f2 == "b" },
+		},
+		{
+			name:    "required too few",
+			formals: []*formal{req(&f1), req(&f2)},
+			args:    []string{"a"},
+			wantErr: "too few",
+		},
+		{
+			name:    "required too many",
+			formals: []*formal{req(&f1)},
+			args:    []string{"a", "b"},
+			wantErr: "too many",
+		},
+		{
+			name:    "min 0 none",
+			formals: []*formal{req(&f1), rest(0, &r)},
+			args:    []string{"a"},
+			want:    func() bool { return f1 == "a" && len(r) == 0 },
+		},
+		{
+			name:    "min 0 two",
+			formals: []*formal{req(&f1), rest(0, &r)},
+			args:    []string{"a", "b", "c"},
+			want: func() bool {
+				return f1 == "a" && reflect.DeepEqual(r, []string{"b", "c"})
+			},
+		},
+		{
+			name:    "min 1 none",
+			formals: []*formal{req(&f1), rest(1, &r)},
+			args:    []string{"a"},
+			wantErr: "at least 1",
+		},
+		{
+			name:    "min 1 one",
+			formals: []*formal{req(&f1), rest(1, &r)},
+			args:    []string{"a", "b"},
+			want: func() bool {
+				return f1 == "a" && reflect.DeepEqual(r, []string{"b"})
+			},
+		},
+		{
+			name:    "opt absent",
+			formals: []*formal{req(&f1), opt(&f2), req(&f3)},
+			args:    []string{"a"},
+			want:    func() bool { return f1 == "a" && f2 == "" && f3 == "" },
+		},
+		{
+			name:    "opt present",
+			formals: []*formal{req(&f1), opt(&f2), req(&f3)},
+			args:    []string{"a", "b", "c"},
+			want:    func() bool { return f1 == "a" && f2 == "b" && f3 == "c" },
+		},
+		{
+			name:    "opt some",
+			formals: []*formal{req(&f1), opt(&f2), req(&f3)},
+			args:    []string{"a", "b"},
+			wantErr: "too few",
+		},
+		{
+			name:    "opt rest", // e.g. tsranks SPEC [TERM PACKAGE1 PACKAGE2 ...]
+			formals: []*formal{req(&f1), opt(&f2), rest(1, &r)},
+			args:    []string{"spec"},
+			want:    func() bool { return f1 == "spec" && f2 == "" && r == nil },
+		},
+		{
+			name:    "opt rest 2",
+			formals: []*formal{req(&f1), opt(&f2), rest(1, &r)},
+			args:    []string{"spec", "term"},
+			wantErr: "at least 1",
+		},
+		{
+			name:    "opt rest 3",
+			formals: []*formal{req(&f1), opt(&f2), rest(1, &r)},
+			args:    []string{"spec", "term", "p1"},
+			want: func() bool {
+				return f1 == "spec" && f2 == "term" && reflect.DeepEqual(r, []string{"p1"})
+			},
+		},
+		{
+			name:    "opt rest 4",
+			formals: []*formal{req(&f1), opt(&f2), rest(1, &r)},
+			args:    []string{"spec", "term", "p1", "p2"},
+			want: func() bool {
+				return f1 == "spec" && f2 == "term" &&
+					reflect.DeepEqual(r, []string{"p1", "p2"})
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f1 = ""
+			f2 = ""
+			f3 = ""
+			r = nil
+			got := bindFormals(test.formals, test.args)
+			if got == nil && test.wantErr != "" {
+				t.Error("got no error, wanted one")
+			} else if got != nil && test.wantErr == "" {
+				t.Errorf("got %q, wanted no error", got)
+			} else if got != nil && !strings.Contains(got.Error(), test.wantErr) {
+				t.Errorf("got %q, wanted error containing %q", got, test.wantErr)
+			} else if test.want != nil && !test.want() {
+				t.Error("want function returned false")
+			}
+		})
+	}
 }

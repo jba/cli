@@ -1,11 +1,10 @@
 // Copyright 2021 Jonathan Amsterdam.
 
 //TODO:
-// global flag.Usage
-// print global flags in Usage
-// trim whitespace from command doc
 // distinguish -h,-help and exit 0
 // sub-commands
+// improve rendering of default flag values for slices, strings, (etc.?)
+// split command doc on lines, do uniform indentation
 
 package cli
 
@@ -21,8 +20,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 type Command interface {
@@ -36,7 +33,6 @@ type Cmd struct {
 	flags   *flag.FlagSet
 	nFlags  int
 	formals []*formal
-	mu      sync.Mutex
 	subs    []*Cmd
 }
 
@@ -46,12 +42,10 @@ var topCmd *Cmd = &Cmd{
 }
 
 func (c *Cmd) Register(name string, co Command, doc string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.find(name) != nil {
 		panic(fmt.Sprintf("duplicate command: %q", name))
 	}
-	cmd := newCmd(name, co, doc)
+	cmd := newCmd(name, co, strings.TrimSpace(doc))
 	if err := cmd.processFields(co); err != nil {
 		panic(err)
 	}
@@ -62,7 +56,6 @@ func Register(name string, c Command, doc string) {
 	topCmd.Register(name, c, doc)
 }
 
-// c.mu should be held.
 func (c *Cmd) find(name string) *Cmd {
 	for _, c := range c.subs {
 		if c.name == name {
@@ -85,9 +78,7 @@ func Run(ctx context.Context, args []string) {
 		Usage(os.Stderr)
 		os.Exit(2)
 	}
-	topCmd.mu.Lock()
 	c := topCmd.find(args[0])
-	topCmd.mu.Unlock()
 	if c == nil {
 		fmt.Fprintf(os.Stderr, "unknown command: %q\n", args[0])
 		Usage(os.Stderr)
@@ -106,12 +97,12 @@ func Run(ctx context.Context, args []string) {
 
 func Usage(w io.Writer) {
 	fmt.Fprintf(w, "Usage of %s:\n", topCmd.name)
-	topCmd.mu.Lock()
-	cs := topCmd.subs
-	topCmd.mu.Unlock()
-	for _, c := range cs {
+	for _, c := range topCmd.subs {
 		c.usage(w, false)
 	}
+	fmt.Fprintln(w, "\nGlobal flags (specify before command name):")
+	topCmd.flags.SetOutput(w)
+	topCmd.flags.PrintDefaults()
 }
 
 func (c *Cmd) usage(w io.Writer, single bool) {
@@ -122,7 +113,9 @@ func (c *Cmd) usage(w io.Writer, single bool) {
 		fmt.Fprintf(w, "%s\n  %s\n", h, c.doc)
 	}
 	for _, f := range c.formals {
-		fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+		if f.doc != "" {
+			fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+		}
 	}
 	c.flags.SetOutput(w)
 	c.flags.PrintDefaults()
@@ -162,8 +155,9 @@ type formal struct {
 	name   string        // display name
 	field  reflect.Value // "pointer" to field to set
 	doc    string
-	min    int                               // for last slice, minimum args needed
-	parser func(string) (interface{}, error) // convert and/or validate
+	min    int       // for last slice, minimum args needed
+	opt    bool      // if true, this and all following formals are optional
+	parser parseFunc // convert and/or validate
 }
 
 func (c *Cmd) processFields(x interface{}) error {
@@ -177,7 +171,9 @@ func (c *Cmd) processFields(x interface{}) error {
 		f := t.Field(i)
 		tag := f.Tag.Get("cli")
 		if tag == "" {
-			continue
+			// If the "cli" key is missing, assume the entire tag is a cli spec,
+			// for convenience.
+			tag = string(f.Tag)
 		}
 		if err := c.parseTag(tag, f, v.Field(i)); err != nil {
 			return fmt.Errorf("command %q, field %q: %v", c.name, f.Name, err)
@@ -191,6 +187,15 @@ func (c *Cmd) processFields(x interface{}) error {
 	return nil
 }
 
+var validKeys = map[string]bool{
+	"flag":  true,
+	"name":  true,
+	"min":   true,
+	"oneof": true,
+	"doc":   true,
+	"opt":   true,
+}
+
 // A tag representing an argument is most simply
 // just the doc for that arg.
 // It can also start with some options:
@@ -198,15 +203,18 @@ func (c *Cmd) processFields(x interface{}) error {
 // - flag=f, which makes a flag named f
 // - oneof=a|b|c, which which validate that the arg is one of those strings.
 // A full example:
-//   Env `cli:"name=env oneof=dev|prod  development environment"`
+//   Env `cli:"name=env, oneof=dev|prod, development environment"`
 func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) error {
-	if !sf.IsExported() {
+	if tag != "" && !sf.IsExported() {
 		return errors.New("cli tag on unexported field")
 	}
 	m := tagToMap(tag)
 	for k := range m {
 		if k == "" {
 			return errors.New("empty key")
+		}
+		if !validKeys[k] {
+			return fmt.Errorf("invalid key: %q", k)
 		}
 	}
 	if m["flag"] != "" && m["name"] != "" {
@@ -222,12 +230,19 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		if fname == "" {
 			fname = strings.ToLower(sf.Name)
 		}
+		if fname[0] == '-' {
+			fname = fname[1:]
+		}
 		c.nFlags++
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
 			c.flags.BoolVar(ptr, fname, *ptr, m["doc"])
 		} else {
-			c.flags.Func(fname, m["doc"], func(s string) error {
+			usage := m["doc"]
+			if !field.IsZero() {
+				usage += fmt.Sprintf(" (default %v)", field)
+			}
+			c.flags.Func(fname, usage, func(s string) error {
 				val, err := parser(s)
 				if err != nil {
 					return err
@@ -242,15 +257,33 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		if name == "" {
 			name = strings.ToUpper(sf.Name)
 		}
+		optVal, opt := m["opt"]
+		if optVal != "" {
+			return errors.New(`"opt" should not have a value`)
+		}
 		f := &formal{
 			name:   name,
 			field:  field,
 			doc:    m["doc"],
 			min:    -1,
+			opt:    opt,
 			parser: parser,
 		}
+		minTag, hasMinTag := m["min"]
 		if sf.Type.Kind() == reflect.Slice {
 			f.min = 0
+			if hasMinTag {
+				min, err := strconv.Atoi(minTag)
+				if err != nil {
+					return fmt.Errorf("min: %w", err)
+				}
+				if min < 0 {
+					return errors.New("min cannot be negative")
+				}
+				f.min = min
+			}
+		} else if hasMinTag {
+			return errors.New("min is only for slice args")
 		}
 		c.formals = append(c.formals, f)
 	}
@@ -284,114 +317,6 @@ func tagToMap(tag string) map[string]string {
 	return m
 }
 
-type parseFunc func(string) (interface{}, error)
-
-func buildParser(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
-	if t.Kind() == reflect.Slice {
-		if _, isFlag := tagMap["flag"]; isFlag {
-			return parserForSlice(t, tagMap, ",")
-		}
-		return parserForType(t.Elem(), tagMap)
-	}
-	return parserForType(t, tagMap)
-}
-
-func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parseFunc, error) {
-	elp, err := parserForType(t.Elem(), tagMap)
-	if err != nil {
-		return nil, err
-	}
-	return func(s string) (interface{}, error) {
-		parts := strings.Split(s, sep)
-		slice := reflect.MakeSlice(t, len(parts), len(parts))
-		for i, p := range parts {
-			el, err := elp(p)
-			if err != nil {
-				return nil, fmt.Errorf("%q: %v", p, err)
-			}
-			slice.Index(i).Set(reflect.ValueOf(el))
-		}
-		return slice.Interface(), nil
-	}, nil
-}
-
-var durationType = reflect.TypeOf(time.Duration(0))
-
-// scalar types only
-func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
-	if oneof, ok := tagMap["oneof"]; ok {
-		fmt.Println("oneof")
-		if oneof == "" {
-			return nil, errors.New("empty oneof")
-		}
-		if t.Kind() != reflect.String {
-			return nil, fmt.Errorf("oneof must be string type, not %s", t)
-		}
-		return parserForOneof(strings.Split(oneof, "|")), nil
-	}
-	if t == durationType {
-		return func(s string) (interface{}, error) {
-			return time.ParseDuration(s)
-		}, nil
-	}
-
-	convert := func(v interface{}) interface{} {
-		return reflect.ValueOf(v).Convert(t).Interface()
-	}
-
-	switch t.Kind() {
-	case reflect.String:
-		return func(s string) (interface{}, error) {
-			return convert(s), nil
-		}, nil
-	case reflect.Bool:
-		return func(s string) (interface{}, error) {
-			b, err := strconv.ParseBool(s)
-			if err != nil {
-				return nil, err
-			}
-			return convert(b), nil
-		}, nil
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return func(s string) (interface{}, error) {
-			i, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			return convert(i), nil
-		}, nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return func(s string) (interface{}, error) {
-			u, err := strconv.ParseUint(s, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			return convert(u), nil
-		}, nil
-	case reflect.Float32, reflect.Float64:
-		return func(s string) (interface{}, error) {
-			f, err := strconv.ParseFloat(s, 64)
-			if err != nil {
-				return nil, err
-			}
-			return convert(f), nil
-		}, nil
-	default:
-		return nil, fmt.Errorf("cannot parse string into %s", t)
-	}
-}
-
-func parserForOneof(choices []string) parseFunc {
-	return func(s string) (interface{}, error) {
-		for _, c := range choices {
-			if s == c {
-				return c, nil
-			}
-		}
-		return nil, fmt.Errorf("must be one of: %s", strings.Join(choices, ", "))
-	}
-}
-
 // UsageError is an error in how the command is invoked.
 // If returned from Command.Run, then the usage message for
 // the command will be printed in addition to the underlying error,
@@ -417,51 +342,46 @@ func (c *Cmd) run(ctx context.Context, args []string) error {
 
 func (c *Cmd) bindArgs(args []string) error {
 	_ = c.flags.Parse(args)
-	// Check number of args.
-	nargs := c.flags.NArg()
-	if len(c.formals) == 0 {
-		if nargs > 0 {
-			return &UsageError{errors.New("too many args")}
-		}
-	} else {
-		min := c.formals[len(c.formals)-1].min
-		if min == -1 {
-			// no rest arg
-			if nargs < len(c.formals) {
-				return &UsageError{errors.New("too few args")}
-			}
-			if nargs > len(c.formals) {
-				return &UsageError{errors.New("too many args")}
-			}
-		} else if nargs < len(c.formals)-1+min {
-			return &UsageError{errors.New("too few args")}
-		}
-	}
-	for i, f := range c.formals {
+	return bindFormals(c.formals, c.flags.Args())
+}
+
+func bindFormals(formals []*formal, args []string) error {
+	a := 0 // index into args
+	for i, f := range formals {
 		if f.min >= 0 {
-			// We've already checked that this is the last formal.
-			nArgsLeft := c.flags.NArg() - i
+			// "Rest" arg. We've already checked that this is the last formal.
+			nArgsLeft := len(args) - i
 			if nArgsLeft < f.min {
 				return fmt.Errorf("%s: need at least %d args, got %d", f.name, f.min, nArgsLeft)
 			}
 			slice := reflect.MakeSlice(f.field.Type(), 0, nArgsLeft)
-			for j := i; j < c.flags.NArg(); j++ {
-				v, err := f.parser(c.flags.Arg(j))
+			for j := i; j < len(args); j++ {
+				v, err := f.parser(args[j])
 				if err != nil {
 					return fmt.Errorf("%s: %v", f.name, err)
 				}
 				slice = reflect.Append(slice, reflect.ValueOf(v))
 			}
 			f.field.Set(slice)
+			return nil
+		} else if i >= len(args) {
+			if f.opt {
+				// This and all following args are optional, so we can skip.
+				return nil
+			}
+			return errors.New("too few args")
 		} else {
-			v, err := f.parser(c.flags.Arg(i))
+			v, err := f.parser(args[a])
 			if err != nil {
 				return fmt.Errorf("%s: %v", f.name, err)
 			}
 			f.field.Set(reflect.ValueOf(v))
+			a++
 		}
 	}
-
+	if a < len(args) {
+		return errors.New("too many args")
+	}
 	return nil
 }
 
