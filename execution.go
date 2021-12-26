@@ -22,49 +22,56 @@ func MainContext(ctx context.Context) {
 		usage(flag.CommandLine.Output())
 	}
 	flag.Parse()
-	if err := Run(ctx, topCmd, os.Args[1:]); err != nil {
+	if err := topCmd.Run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		var uerr *UsageError
 		if errors.As(err, &uerr) {
 			fmt.Fprintln(os.Stderr)
-			topCmd.flags.Usage()
+			uerr.cmd.flags.Usage()
 			os.Exit(2)
 		}
 		os.Exit(1)
 	}
 }
 
-func Run(ctx context.Context, cmd *Cmd, args []string) error {
+func (c *Cmd) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return &UsageError{errors.New("no arguments")}
+		return &UsageError{c, errors.New("no arguments")}
 	}
-	c := cmd.findSub(args[0])
-	if c == nil {
-		return &UsageError{fmt.Errorf("unknown command: %q", args[0])}
-	}
-	return c.run(ctx, args[1:])
+	return c.findAndRun(ctx, args)
 }
 
-func RunTest(args ...string) {
-	Run(context.Background(), topCmd, args)
+func (c *Cmd) findAndRun(ctx context.Context, args []string) error {
+	if err := c.validate(); err != nil {
+		return err
+	}
+	subc := c.findSub(args[0])
+	if subc == nil {
+		return &UsageError{c, fmt.Errorf("unknown command: %q", args[0])}
+	}
+	return subc.run(ctx, args[1:])
 }
 
 func (c *Cmd) run(ctx context.Context, args []string) error {
-	if err := c.bindArgs(ctx, args); err != nil {
-		return &UsageError{err}
-	}
-	return c.c.Run(ctx)
-}
-
-func (c *Cmd) bindArgs(ctx context.Context, args []string) error {
 	if err := c.flags.Parse(args); err != nil {
 		return err
 	}
 	if c.flags.NArg() > 0 && len(c.subs) > 0 {
 		// There are more args and there are sub-commands, so run a sub-command.
-		return Run(ctx, c, c.flags.Args())
+		return c.findAndRun(ctx, c.flags.Args())
 	}
-	return bindFormals(c.formals, c.flags.Args())
+	if err := bindFormals(c.formals, c.flags.Args()); err != nil {
+		return err
+	}
+	if com, ok := c.c.(Command); ok {
+		return com.Run(ctx)
+	}
+	// c is a group, but it is not a command.
+	return &UsageError{c, errors.New("missing sub-command")}
+}
+
+func RunTest(args ...string) error {
+	return topCmd.Run(context.Background(), args)
 }
 
 func bindFormals(formals []*formal, args []string) error {

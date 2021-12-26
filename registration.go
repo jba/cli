@@ -14,27 +14,29 @@ import (
 
 // Code to register and prepare commands.
 
-func Register(name string, c Command, doc string) *Cmd {
-	return topCmd.Register(name, c, doc)
+// The second arg should can be a Command, or if not then it's a group.
+func Register(name string, x interface{}, doc string) *Cmd {
+	return topCmd.Register(name, x, doc)
 }
 
-func (c *Cmd) Register(name string, co Command, doc string) *Cmd {
-	cmd, err := c.register(name, co, doc)
+// Register a sub-command or sub-group of c.
+func (c *Cmd) Register(name string, x interface{}, doc string) *Cmd {
+	cmd, err := c.register(name, x, doc)
 	if err != nil {
 		panic(err)
 	}
 	return cmd
 }
 
-func (c *Cmd) register(name string, co Command, doc string) (*Cmd, error) {
+func (c *Cmd) register(name string, x interface{}, doc string) (*Cmd, error) {
 	if len(c.formals) > 0 {
 		return nil, fmt.Errorf("%s: a command cannot have both arguments and sub-commands", c.name)
 	}
 	if c.findSub(name) != nil {
-		return nil, fmt.Errorf("duplicate command: %q", name)
+		return nil, fmt.Errorf("duplicate sub-command: %q", name)
 	}
-	cmd := newCmd(name, co, strings.TrimSpace(doc))
-	if err := cmd.processFields(co); err != nil {
+	cmd := newCmd(name, x, strings.TrimSpace(doc))
+	if err := cmd.processFields(x); err != nil {
 		return nil, err
 	}
 	c.subs = append(c.subs, cmd)
@@ -50,10 +52,10 @@ func (c *Cmd) findSub(name string) *Cmd {
 	return nil
 }
 
-func newCmd(name string, c Command, doc string) *Cmd {
+func newCmd(name string, x interface{}, doc string) *Cmd {
 	cmd := &Cmd{
 		name:  name,
-		c:     c,
+		c:     x,
 		doc:   doc,
 		flags: flag.NewFlagSet(name, flag.ContinueOnError),
 	}

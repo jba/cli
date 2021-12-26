@@ -24,7 +24,7 @@ type Command interface {
 
 type Cmd struct {
 	name    string
-	c       Command
+	c       interface{} // either Command, or a pure group
 	doc     string
 	flags   *flag.FlagSet
 	nFlags  int
@@ -32,9 +32,17 @@ type Cmd struct {
 	subs    []*Cmd
 }
 
-var topCmd *Cmd = &Cmd{
+var topCmd = &Cmd{
 	name:  filepath.Base(os.Args[0]),
 	flags: flag.CommandLine,
+}
+
+func (c *Cmd) validate() error {
+	// Check that c.c is either a Command, or has sub-commands.
+	if _, ok := c.c.(Command); !ok && len(c.subs) == 0 {
+		return fmt.Errorf("%s is not a Command and has no sub-commands", c.name)
+	}
+	return nil
 }
 
 func usage(w io.Writer) {
@@ -80,19 +88,21 @@ func (c *Cmd) usageHeader() string {
 }
 
 // UsageError is an error in how the command is invoked.
-// If returned from Command.Run, then the usage message for
-// the command will be printed in addition to the underlying error,
-// and the process will exit with code 2.
 type UsageError struct {
-	err error
+	cmd *Cmd
+	Err error
 }
 
 func (u *UsageError) Error() string {
-	return u.err.Error()
+	s := u.Err.Error()
+	if u.cmd != nil && u.cmd.name != "" {
+		s = u.cmd.name + ": " + s
+	}
+	return s
 }
 
 func (u *UsageError) Unwrap() error {
-	return u.err
+	return u.Err
 }
 
 // Cut cuts s around the first instance of sep,

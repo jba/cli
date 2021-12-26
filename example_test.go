@@ -4,8 +4,8 @@ package cli_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log"
 
 	"github.com/jba/cli"
 )
@@ -99,9 +99,6 @@ func init() {
 	subsCmd.Register("b", &subs_b{}, "do b to subs")
 }
 
-func (s *subs) Run(ctx context.Context) error {
-	return errors.New("this is a group")
-}
 func (s *subs_a) Run(ctx context.Context) error {
 	fmt.Println("a", s)
 	return nil
@@ -112,11 +109,19 @@ func (s *subs_b) Run(ctx context.Context) error {
 	return nil
 }
 
+func must(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func Example_subs() {
-	cli.RunTest("subs", "a", "3")
-	cli.RunTest("subs", "b", "2")
+	must(cli.RunTest("subs", "a", "3"))
+	must(cli.RunTest("subs", "b", "2"))
+	fmt.Println(cli.RunTest("subs"))
 
 	// Output:
 	// a &{3}
 	// b &{2}
+	// subs: missing sub-command
 }
