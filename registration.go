@@ -35,12 +35,13 @@ func (c *Cmd) register(name string, x interface{}, doc string) (*Cmd, error) {
 	if c.findSub(name) != nil {
 		return nil, fmt.Errorf("duplicate sub-command: %q", name)
 	}
-	cmd := newCmd(name, x, strings.TrimSpace(doc))
-	if err := cmd.processFields(x); err != nil {
+	sub := newCmd(name, x, strings.TrimSpace(doc))
+	if err := sub.processFields(x); err != nil {
 		return nil, err
 	}
-	c.subs = append(c.subs, cmd)
-	return cmd, nil
+	c.subs = append(c.subs, sub)
+	sub.super = c
+	return sub, nil
 }
 
 func (c *Cmd) findSub(name string) *Cmd {

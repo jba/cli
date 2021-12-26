@@ -94,9 +94,9 @@ type subs_b struct {
 var subsCmd *cli.Cmd
 
 func init() {
-	subsCmd = cli.Register("subs", &subs{}, "subs")
-	subsCmd.Register("a", &subs_a{}, "do a to subs")
-	subsCmd.Register("b", &subs_b{}, "do b to subs")
+	subsCmd = cli.Register("subs", &subs{}, "doc for subs")
+	subsCmd.Register("a", &subs_a{}, "doc for a")
+	subsCmd.Register("b", &subs_b{}, "doc for b")
 }
 
 func (s *subs_a) Run(ctx context.Context) error {
@@ -124,4 +124,13 @@ func Example_subs() {
 	// a &{3}
 	// b &{2}
 	// subs: missing sub-command
+	// Usage:
+	// cli.test subs [flags]    doc for subs
+	//   -f value
+	//     	a flag
+	// cli.test subs a A
+	//   doc for a
+
+	// cli.test subs b B
+	//   doc for b
 }

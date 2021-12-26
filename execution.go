@@ -19,15 +19,13 @@ func Main() {
 
 func MainContext(ctx context.Context) {
 	flag.Usage = func() {
-		usage(flag.CommandLine.Output())
+		topCmd.usage(flag.CommandLine.Output(), true)
 	}
 	flag.Parse()
 	if err := topCmd.Run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		var uerr *UsageError
 		if errors.As(err, &uerr) {
-			fmt.Fprintln(os.Stderr)
-			uerr.cmd.flags.Usage()
 			os.Exit(2)
 		}
 		os.Exit(1)

@@ -29,6 +29,7 @@ type Cmd struct {
 	flags   *flag.FlagSet
 	nFlags  int
 	formals []*formal
+	super   *Cmd
 	subs    []*Cmd
 }
 
@@ -45,17 +46,10 @@ func (c *Cmd) validate() error {
 	return nil
 }
 
-func usage(w io.Writer) {
-	fmt.Fprintf(w, "Usage of %s:\n", topCmd.name)
-	for _, c := range topCmd.subs {
-		c.usage(w, false)
-	}
-	fmt.Fprintln(w, "\nGlobal flags (specify before command name):")
-	topCmd.flags.SetOutput(w)
-	topCmd.flags.PrintDefaults()
-}
-
 func (c *Cmd) usage(w io.Writer, single bool) {
+	if single {
+		fmt.Fprintln(w, "Usage:")
+	}
 	h := c.usageHeader()
 	if single && len(h)+len(c.doc) <= 76 {
 		fmt.Fprintf(w, "%s    %s\n", h, c.doc)
@@ -69,12 +63,24 @@ func (c *Cmd) usage(w io.Writer, single bool) {
 	}
 	c.flags.SetOutput(w)
 	c.flags.PrintDefaults()
+	if single {
+		for _, s := range c.subs {
+			s.usage(w, false)
+		}
+	}
 	fmt.Fprintln(w)
+}
+
+func (c *Cmd) fullName() string {
+	if c.super == nil {
+		return c.name
+	}
+	return c.super.fullName() + " " + c.name
 }
 
 func (c *Cmd) usageHeader() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s", c.name)
+	fmt.Fprintf(&b, "%s", c.fullName())
 	if c.nFlags > 0 {
 		fmt.Fprint(&b, " [flags]")
 	}
@@ -89,16 +95,15 @@ func (c *Cmd) usageHeader() string {
 
 // UsageError is an error in how the command is invoked.
 type UsageError struct {
-	cmd *Cmd
+	Cmd *Cmd
 	Err error
 }
 
 func (u *UsageError) Error() string {
-	s := u.Err.Error()
-	if u.cmd != nil && u.cmd.name != "" {
-		s = u.cmd.name + ": " + s
-	}
-	return s
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s: %v\n", u.Cmd.name, u.Err.Error())
+	u.Cmd.usage(&b, true)
+	return b.String()
 }
 
 func (u *UsageError) Unwrap() error {
