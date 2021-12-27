@@ -61,7 +61,6 @@ func newCmd(name string, x interface{}, doc string) *Cmd {
 		flags: flag.NewFlagSet(name, flag.ContinueOnError),
 	}
 	cmd.flags.Usage = func() {
-		fmt.Fprintln(cmd.flags.Output(), "Usage:")
 		cmd.usage(cmd.flags.Output(), true)
 	}
 	return cmd

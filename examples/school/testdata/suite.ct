@@ -1,0 +1,80 @@
+$ school --> FAIL
+school: no arguments
+Usage:
+school students
+  commands for students
+
+school courses
+  commands for courses
+
+$ school -h
+Usage:
+school students
+  commands for students
+
+school courses
+  commands for courses
+
+
+$ school students --> FAIL
+students: missing sub-command
+Usage:
+school students list [flags]
+  list students
+  -min value
+    	list only students above this GPA
+
+school students show [flags] NAME
+  show a single student
+  -v	show more detail
+
+$ school students -h
+Usage:
+school students list [flags]
+  list students
+  -min value
+    	list only students above this GPA
+
+school students show [flags] NAME
+  show a single student
+  -v	show more detail
+
+
+$ school students list
+Pat       3.2
+Al        4
+Cam       2.8
+
+$ school students show Al
+Al
+
+$ school students show -v Al
+Al
+GPA: 4
+
+
+$ school courses --> FAIL
+courses: missing sub-command
+Usage:
+school courses list
+  list courses
+
+school courses show NAMES...
+  show some courses
+
+$ school courses -h
+Usage:
+school courses list
+  list courses
+
+school courses show NAMES...
+  show some courses
+
+$ school courses list
+Math
+Science
+History
+
+$ school courses show Math History
+Math
+History

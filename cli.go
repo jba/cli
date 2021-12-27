@@ -9,6 +9,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -48,25 +49,30 @@ func (c *Cmd) usage(w io.Writer, single bool) {
 	if single {
 		fmt.Fprintln(w, "Usage:")
 	}
-	h := c.usageHeader()
-	if single && len(h)+len(c.doc) <= 76 {
-		fmt.Fprintf(w, "%s    %s\n", h, c.doc)
-	} else {
-		fmt.Fprintf(w, "%s\n  %s\n", h, c.doc)
-	}
-	for _, f := range c.formals {
-		if f.doc != "" {
-			fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+	// If this is a group and we're only printing this, don't print a header.
+	if !(single && len(c.subs) > 0) {
+		h := c.usageHeader()
+		if single && len(h)+len(c.doc) <= 76 {
+			fmt.Fprintf(w, "%s    %s\n", h, c.doc)
+		} else {
+			fmt.Fprintf(w, "%s\n  %s\n", h, c.doc)
+		}
+		for _, f := range c.formals {
+			if f.doc != "" {
+				fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+			}
 		}
 	}
 	c.flags.SetOutput(w)
 	c.flags.PrintDefaults()
 	if single {
-		for _, s := range c.subs {
+		for i, s := range c.subs {
+			if i > 0 {
+				fmt.Fprintln(w)
+			}
 			s.usage(w, false)
 		}
 	}
-	fmt.Fprintln(w)
 }
 
 func (c *Cmd) fullName() string {
@@ -113,9 +119,13 @@ func NewUsageError(err error) *UsageError {
 
 func (u *UsageError) Error() string {
 	var b strings.Builder
+	if errors.Is(u.Err, flag.ErrHelp) {
+		fmt.Printf("################ help\n")
+	}
 	fmt.Fprintf(&b, "%s: %v\n", u.cmd.name, u.Err.Error())
 	u.cmd.usage(&b, true)
-	return b.String()
+	s := b.String()
+	return s[:len(s)-1] // trim final newline
 }
 
 func (u *UsageError) Unwrap() error {

@@ -34,10 +34,10 @@ func mainWithArgs(ctx context.Context, args []string) int {
 		return 2
 	}
 	if err := topCmd.Run(ctx, args); err != nil {
-		fmt.Fprintln(flag.CommandLine.Output(), err)
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
+		fmt.Fprintln(flag.CommandLine.Output(), err)
 		var uerr *UsageError
 		if errors.As(err, &uerr) {
 			return 2
