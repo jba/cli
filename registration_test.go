@@ -281,3 +281,19 @@ func TestBindFormals(t *testing.T) {
 		})
 	}
 }
+func TestFlagUsage(t *testing.T) {
+
+	type s struct {
+		File string "flag=in, input `filename` for input"
+	}
+	cmd := Register("s", &s{}, "")
+	f := cmd.flags.Lookup("in")
+	if f == nil {
+		t.Fatal("flag is nil")
+	}
+	got := f.Usage
+	want := "input `filename` for input"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

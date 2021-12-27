@@ -1,7 +1,9 @@
 // Copyright 2021 Jonathan Amsterdam.
 
 //TODO:
-// support some way to embed a flag value kind in flag help, other than backticks
+// don't have the top level be a special case: let (or require?) the user define a Cmd for top level
+// write doc
+// doc: to use the backtick feature of the flag package, write the struct tag with quotation marks
 // improve rendering of default flag values for slices, strings, (etc.?)
 // split command doc on lines, do uniform indentation
 
