@@ -13,23 +13,51 @@ import (
 
 // Code for running commands.
 
-func Main() {
-	MainContext(context.Background())
+// Main invokes a command using the program's command-line arguments, passing it
+// the given context. It returns the exit code for the process. Typical use:
+//
+//     os.Exit(cli.Main(context.Background()))
+func Main(ctx context.Context) int {
+	return mainWithArgs(ctx, os.Args[1:])
 }
 
-func MainContext(ctx context.Context) {
+func mainWithArgs(ctx context.Context, args []string) int {
+	validateAll()
 	flag.Usage = func() {
 		topCmd.usage(flag.CommandLine.Output(), true)
 	}
-	flag.Parse()
-	if err := topCmd.Run(ctx, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
+	if err := flag.CommandLine.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if err := topCmd.Run(ctx, args); err != nil {
+		fmt.Fprintln(flag.CommandLine.Output(), err)
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		var uerr *UsageError
 		if errors.As(err, &uerr) {
-			os.Exit(2)
+			return 2
 		}
-		os.Exit(1)
+		return 1
 	}
+	return 0
+}
+
+func validateAll() {
+	var validate func(*Cmd)
+	validate = func(c *Cmd) {
+		if err := c.validate(); err != nil {
+			panic(err)
+		}
+		for _, s := range c.subs {
+			validate(s)
+		}
+	}
+	validate(topCmd)
 }
 
 func (c *Cmd) Run(ctx context.Context, args []string) error {
@@ -58,11 +86,16 @@ func (c *Cmd) run(ctx context.Context, args []string) error {
 		// There are more args and there are sub-commands, so run a sub-command.
 		return c.findAndRun(ctx, c.flags.Args())
 	}
-	if err := bindFormals(c.formals, c.flags.Args()); err != nil {
+	if err := c.bindFormals(c.formals, c.flags.Args()); err != nil {
 		return err
 	}
 	if com, ok := c.c.(Command); ok {
-		return com.Run(ctx)
+		err := com.Run(ctx)
+		var uerr *UsageError
+		if errors.As(err, &uerr) {
+			uerr.cmd = c
+		}
+		return err
 	}
 	// c is a group, but it is not a command.
 	return &UsageError{c, errors.New("missing sub-command")}
@@ -72,7 +105,7 @@ func RunTest(args ...string) error {
 	return topCmd.Run(context.Background(), args)
 }
 
-func bindFormals(formals []*formal, args []string) error {
+func (c *Cmd) bindFormals(formals []*formal, args []string) error {
 	a := 0 // index into args
 	for i, f := range formals {
 		if f.min >= 0 {
@@ -96,7 +129,7 @@ func bindFormals(formals []*formal, args []string) error {
 				// This and all following args are optional, so we can skip.
 				return nil
 			}
-			return errors.New("too few args")
+			return &UsageError{cmd: c, Err: errors.New("too few args")}
 		} else {
 			v, err := f.parser(args[a])
 			if err != nil {
@@ -107,7 +140,7 @@ func bindFormals(formals []*formal, args []string) error {
 		}
 	}
 	if a < len(args) {
-		return errors.New("too many args")
+		return &UsageError{cmd: c, Err: errors.New("too many args")}
 	}
 	return nil
 }

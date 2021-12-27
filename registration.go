@@ -149,7 +149,6 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		if fname[0] == '-' {
 			fname = fname[1:]
 		}
-		c.nFlags++
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
 			c.flags.BoolVar(ptr, fname, *ptr, m["doc"])

@@ -38,61 +38,60 @@ func TestTagToMap(t *testing.T) {
 }
 
 func TestParseTag(t *testing.T) {
-	// type s struct{
-	// 	F int
-	// }
-	// f := reflect.ValueOf(s{}).Field(0)
-	// for _, test := range []struct {
-	// 	tag      string
-	// 	wantName string
-	// 	wantDoc  string
-	// 	wantErr  bool
-	// }{
-	// 	{
-	// 		tag:     "just doc",
-	// 		wantDoc: "just doc",
-	// 	},
-	// 	{
-	// 		tag:      "name:foo \tand then doc\t ",
-	// 		wantName: "foo",
-	// 		wantDoc:  "and then doc",
-	// 	},
-	// 	{
-	// 		tag:     "oneof:1|2|4 some doc",
-	// 		wantDoc: "some doc",
-	// 	},
-	// 	{
-	// 		tag:     "oneof:1|2|4 some doc",
-	// 		wantDoc: "some doc",
-	// 	},
-	// 	{
-	// 		tag:      "\toneof:2\tname:bar\tdoc\t",
-	// 		wantName: "bar",
-	// 		wantDoc:  "doc",
-	// 	},
-	// } {
-	// 	c := &cm
-	// 	got, err := parseTag(test.tag, f)
-	// 	if err != nil {
-	// 		if !test.wantErr {
-	// 			t.Errorf("%q: unwanted error: <%v>", test.tag, err)
-	// 		}
-	// 	} else {
-	// 		if got.name != test.wantName {
-	// 			t.Errorf("%q, name: got %q, want %q", test.tag, got.name, test.wantName)
-	// 		}
-	// 		if got.doc != test.wantDoc {
-	// 			t.Errorf("%q, doc: got %q, want %q", test.tag, got.doc, test.wantDoc)
-	// 		}
-	// 		gotp, err := got.parser("2")
-	// 		if err != nil {
-	// 			t.Errorf("%q: unexpected parsing error: <%v>", test.tag, err)
-	// 		} else if wantp := int64(2); gotp != wantp {
-	// 			t.Errorf("%q: got %v, want %v", test.tag, gotp, wantp)
-	// 		}
-	// 	}
-	// }
-
+	type s struct {
+		F string
+	}
+	sf := reflect.TypeOf(s{}).Field(0)
+	f := reflect.ValueOf(s{}).Field(0)
+	for _, test := range []struct {
+		tag      string
+		wantName string
+		wantDoc  string
+		wantErr  bool
+	}{
+		{
+			tag:      "just doc",
+			wantName: "F",
+			wantDoc:  "just doc",
+		},
+		{
+			tag:      "name=foo, \tand then doc\t ",
+			wantName: "foo",
+			wantDoc:  "and then doc",
+		},
+		{
+			tag:      "oneof=al|be|ga, some doc",
+			wantName: "F",
+			wantDoc:  "some doc",
+		},
+		{
+			tag:      "\toneof=ga | la,\tname=bar\t,doc\t",
+			wantName: "bar",
+			wantDoc:  "doc",
+		},
+	} {
+		c := newCmd("", nil, "")
+		err := c.parseTag(test.tag, sf, f)
+		if err != nil {
+			if !test.wantErr {
+				t.Errorf("%q: unwanted error: <%v>", test.tag, err)
+			}
+		} else {
+			got := c.formals[0]
+			if got.name != test.wantName {
+				t.Errorf("%q, name: got %q, want %q", test.tag, got.name, test.wantName)
+			}
+			if got.doc != test.wantDoc {
+				t.Errorf("%q, doc: got %q, want %q", test.tag, got.doc, test.wantDoc)
+			}
+			gotp, err := got.parser("ga")
+			if err != nil {
+				t.Errorf("%q: unexpected parsing error: <%v>", test.tag, err)
+			} else if wantp := "ga"; gotp != wantp {
+				t.Errorf("%q: got %v, want %v", test.tag, gotp, wantp)
+			}
+		}
+	}
 }
 
 func TestProcessFieldsErrors(t *testing.T) {
@@ -268,7 +267,8 @@ func TestBindFormals(t *testing.T) {
 			f2 = ""
 			f3 = ""
 			r = nil
-			got := bindFormals(test.formals, test.args)
+			c := newCmd("", nil, "")
+			got := c.bindFormals(test.formals, test.args)
 			if got == nil && test.wantErr != "" {
 				t.Error("got no error, wanted one")
 			} else if got != nil && test.wantErr == "" {

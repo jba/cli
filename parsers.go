@@ -110,6 +110,9 @@ func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) 
 }
 
 func parserForOneof(choices []string) parseFunc {
+	for i := range choices {
+		choices[i] = strings.TrimSpace(choices[i])
+	}
 	return func(s string) (interface{}, error) {
 		for _, c := range choices {
 			if s == c {

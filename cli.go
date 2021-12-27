@@ -1,8 +1,7 @@
 // Copyright 2021 Jonathan Amsterdam.
 
 //TODO:
-// distinguish -h,-help and exit 0
-// sub-commands
+// support some way to embed a flag value kind in flag help, other than backticks
 // improve rendering of default flag values for slices, strings, (etc.?)
 // split command doc on lines, do uniform indentation
 
@@ -27,7 +26,6 @@ type Cmd struct {
 	c       interface{} // either Command, or a pure group
 	doc     string
 	flags   *flag.FlagSet
-	nFlags  int
 	formals []*formal
 	super   *Cmd
 	subs    []*Cmd
@@ -73,7 +71,11 @@ func (c *Cmd) usage(w io.Writer, single bool) {
 
 func (c *Cmd) fullName() string {
 	if c.super == nil {
-		return c.name
+		s := c.name
+		if c.numFlags() > 0 {
+			s += " [flags]"
+		}
+		return s
 	}
 	return c.super.fullName() + " " + c.name
 }
@@ -81,7 +83,7 @@ func (c *Cmd) fullName() string {
 func (c *Cmd) usageHeader() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s", c.fullName())
-	if c.nFlags > 0 {
+	if c.numFlags() > 0 {
 		fmt.Fprint(&b, " [flags]")
 	}
 	for _, f := range c.formals {
@@ -93,16 +95,26 @@ func (c *Cmd) usageHeader() string {
 	return b.String()
 }
 
+func (c *Cmd) numFlags() int {
+	n := 0
+	c.flags.VisitAll(func(*flag.Flag) { n++ })
+	return n
+}
+
 // UsageError is an error in how the command is invoked.
 type UsageError struct {
-	Cmd *Cmd
+	cmd *Cmd
 	Err error
+}
+
+func NewUsageError(err error) *UsageError {
+	return &UsageError{Err: err}
 }
 
 func (u *UsageError) Error() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %v\n", u.Cmd.name, u.Err.Error())
-	u.Cmd.usage(&b, true)
+	fmt.Fprintf(&b, "%s: %v\n", u.cmd.name, u.Err.Error())
+	u.cmd.usage(&b, true)
 	return b.String()
 }
 
