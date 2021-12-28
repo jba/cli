@@ -34,6 +34,8 @@ func Top(c *Command) *Command {
 	return c
 }
 
+// Register constructs a Command with the Name, Struct and Usage fields populated,
+// then calls RegisterCommand.
 func (c *Command) Register(name string, str interface{}, usage string) *Command {
 	return c.RegisterCommand(&Command{
 		Name:   name,
@@ -42,8 +44,7 @@ func (c *Command) Register(name string, str interface{}, usage string) *Command 
 	})
 }
 
-// Register a sub-command or sub-group of c.
-// The second arg should can be a Command, or if not then it's a group.
+// RegisterCommand registers a sub-command of the receiver Command.
 func (c *Command) RegisterCommand(sub *Command) *Command {
 	if err := c.register(sub); err != nil {
 		panic(err)
@@ -147,10 +148,13 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 			return fmt.Errorf("invalid key: %q", k)
 		}
 	}
-	if m["flag"] != "" && m["name"] != "" {
+	_, isFlag := m["flag"]
+	if isFlag && m["name"] != "" {
 		return errors.New("either 'flag' or 'name', but not both")
 	}
-
+	if _, isOpt := m["opt"]; isOpt && isFlag {
+		return errors.New("either 'flag' or 'opt', but not both")
+	}
 	parser, err := buildParser(field.Type(), m)
 	if err != nil {
 		return err

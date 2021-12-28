@@ -14,7 +14,12 @@ import (
 // Code for running commands.
 
 // Main invokes a command using the program's command-line arguments, passing it
-// the given context. It returns the exit code for the process. Typical use:
+// the given context. It returns the exit code for the process.
+// Main returns 0 for success, 1 for an error in command execution, and 2
+// for a usage error (wrong number of arguments, unknown flag, etc.).
+//
+// Typically, Main is called on the top Command with the background context, and
+// its return value is passed to os.Exit, like so:
 //
 //     var top = cli.Top(&cli.Command{...})
 //     os.Exit(top.Main(context.Background()))

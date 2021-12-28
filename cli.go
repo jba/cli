@@ -1,9 +1,6 @@
 // Copyright 2021 Jonathan Amsterdam.
 
 //TODO:
-// don't have the top level be a special case: let (or require?) the user define a Cmd for top level
-// write doc
-// doc: to use the backtick feature of the flag package, write the struct tag with quotation marks
 // improve rendering of default flag values for slices, strings, (etc.?)
 // split command doc on lines, do uniform indentation
 
@@ -18,10 +15,21 @@ import (
 	"strings"
 )
 
+// A Command represents a single command, or a group of commands.
 type Command struct {
-	Name   string
+	// The name of the command as users will type it on the command line.
+	Name string
+
+	// A short string describing the command.
+	Usage string
+
+	// If not nil, then a pointer to a struct with some exported fields.
+	// Each exported field is either a flag or an argument for the command,
+	// as determined by the struct tag for the field.
+	// See the package documentation for the syntax of the struct tags.
+	// If the struct pointer implements Runnable, then it can be run
+	// as a command. Otherwise, it represents a group of sub-commands.
 	Struct interface{}
-	Usage  string
 
 	flags   *flag.FlagSet
 	formals []*formal
@@ -39,6 +47,7 @@ type formal struct {
 	parser parseFunc // convert and/or validate
 }
 
+// A Runnable is a command that can be run.
 type Runnable interface {
 	Run(ctx context.Context) error
 }
@@ -122,16 +131,18 @@ func (c *Command) numFlags() int {
 	return n
 }
 
-// UsageError is an error in how the command is invoked.
+// UsageError is an error in how a command is invoked.
 type UsageError struct {
 	cmd *Command
 	Err error
 }
 
+// NewUsageError constructs a UsageError from an error.
 func NewUsageError(err error) *UsageError {
 	return &UsageError{Err: err}
 }
 
+// Error implements the error interface.
 func (u *UsageError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s: %v\n", u.cmd.Name, u.Err.Error())
@@ -140,6 +151,7 @@ func (u *UsageError) Error() string {
 	return s[:len(s)-1] // trim final newline
 }
 
+// Unwrap supports errors.Is and errors.As.
 func (u *UsageError) Unwrap() error {
 	return u.Err
 }
@@ -149,7 +161,7 @@ func (u *UsageError) Unwrap() error {
 // The found result reports whether sep appears in s.
 // If sep does not appear in s, cut returns s, "", false.
 //
-// TODO: remove when go1.18 is out.
+// TODO: remove when go1.19 is out.
 func stringsCut(s, sep string) (before, after string, found bool) {
 	if i := strings.Index(s, sep); i >= 0 {
 		return s[:i], s[i+len(sep):], true
