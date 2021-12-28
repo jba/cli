@@ -13,8 +13,10 @@ import (
 
 // Parsers for arguments and flag values.
 
+// parseFunc is the type of functions that parse argument or flag strings into values.
 type parseFunc func(string) (interface{}, error)
 
+// buildParser constructs a parser for type t, using options in the tag map.
 func buildParser(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
 	if t.Kind() == reflect.Slice {
 		if _, isFlag := tagMap["flag"]; isFlag {
@@ -25,6 +27,9 @@ func buildParser(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
 	return parserForType(t, tagMap)
 }
 
+// parserForSlice returns a parser for a string representing a slice of values.
+// t is the slice type.
+// sep separates elements in the string.
 func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parseFunc, error) {
 	elp, err := parserForType(t.Elem(), tagMap)
 	if err != nil {
@@ -46,7 +51,7 @@ func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parse
 
 var durationType = reflect.TypeOf(time.Duration(0))
 
-// scalar types only
+// parserForType returns a parser for scalar types.
 func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
 	if oneof, ok := tagMap["oneof"]; ok {
 		if oneof == "" {

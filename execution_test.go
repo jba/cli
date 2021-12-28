@@ -17,7 +17,7 @@ func TestExitCode(t *testing.T) {
 	os.Stderr = nil
 
 	type c struct {
-		F int `flag=`
+		F int `cli:"flag="`
 	}
 	top := Top(&Command{Struct: &c{}})
 	top.Register("com", &c{}, "com usage").

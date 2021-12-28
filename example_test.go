@@ -56,9 +56,9 @@ func Example_show() {
 }
 
 type opts struct {
-	Req  string `required arg`
-	Opt1 string `opt=, optional 1`
-	Opt2 string `optional 2`
+	Req  string `cli:"required arg"`
+	Opt1 string `cli:"opt=, optional 1"`
+	Opt2 string `cli:"optional 2"`
 }
 
 func (x *opts) Run(ctx context.Context) error {
@@ -81,7 +81,7 @@ func Example_opts() {
 }
 
 type subs struct {
-	F int `flag=, a flag`
+	F int `cli:"flag=, a flag"`
 }
 
 type subs_a struct {
@@ -95,7 +95,7 @@ type subs_b struct {
 var top, subsCmd *cli.Command
 
 func init() {
-	top = cli.Top(&cli.Command{})
+	top = cli.Top(nil)
 	subsCmd = top.Register("subs", &subs{}, "doc for subs")
 	subsCmd.Register("a", &subs_a{}, "doc for a")
 	subsCmd.Register("b", &subs_b{}, "doc for b")
@@ -128,12 +128,12 @@ func Example_subs() {
 	// b &{2}
 	// subs: missing sub-command
 	// Usage:
-	// cli.test subs [flags]    doc for subs
+	// cli.test [flags] subs [flags]    doc for subs
 	//   -f value
 	//     	a flag
-	// cli.test subs a A
+	// cli.test [flags] subs [flags] a A
 	//   doc for a
-
-	// cli.test subs b B
+	//
+	// cli.test [flags] subs [flags] b B
 	//   doc for b
 }

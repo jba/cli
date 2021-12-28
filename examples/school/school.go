@@ -53,7 +53,7 @@ func init() {
 type studentsGroup struct{}
 
 type studentsList struct {
-	MinGPA float64 `flag=min, list only students above this GPA`
+	MinGPA float64 `cli:"flag=min, list only students above this GPA"`
 }
 
 func (c *studentsList) Run(ctx context.Context) error {
@@ -69,7 +69,7 @@ func (c *studentsList) Run(ctx context.Context) error {
 }
 
 type studentsShow struct {
-	Verbose bool `flag=v, show more detail`
+	Verbose bool `cli:"flag=v, show more detail"`
 	Name    string
 }
 

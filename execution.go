@@ -41,6 +41,7 @@ func (c *Command) mainWithArgs(ctx context.Context, args []string) int {
 	return 0
 }
 
+// Run invokes the command on the arguments.
 func (c *Command) Run(ctx context.Context, args []string) error {
 	if err := c.validate(); err != nil {
 		return err
@@ -50,7 +51,11 @@ func (c *Command) Run(ctx context.Context, args []string) error {
 	}
 	if c.flags.NArg() > 0 && len(c.subs) > 0 {
 		// There are more args and there are sub-commands, so run a sub-command.
-		return c.findAndRun(ctx, c.flags.Args())
+		subc := c.findSub(c.flags.Arg(0))
+		if subc == nil {
+			return &UsageError{c, fmt.Errorf("unknown command: %q", c.flags.Arg(0))}
+		}
+		return subc.Run(ctx, c.flags.Args()[1:])
 	}
 	if err := c.bindFormals(c.formals, c.flags.Args()); err != nil {
 		return err
@@ -65,14 +70,6 @@ func (c *Command) Run(ctx context.Context, args []string) error {
 	}
 	// c is a group, but it is not a command.
 	return &UsageError{c, errors.New("missing sub-command")}
-}
-
-func (c *Command) findAndRun(ctx context.Context, args []string) error {
-	subc := c.findSub(args[0])
-	if subc == nil {
-		return &UsageError{c, fmt.Errorf("unknown command: %q", args[0])}
-	}
-	return subc.Run(ctx, args[1:])
 }
 
 func (c *Command) bindFormals(formals []*formal, args []string) error {

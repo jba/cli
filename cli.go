@@ -67,8 +67,8 @@ func (c *Command) usage(w io.Writer, single bool) {
 	if single {
 		fmt.Fprintln(w, "Usage:")
 	}
-	// If this is a group and we're only printing this, don't print a header.
-	if !(single && len(c.subs) > 0) {
+	// If this is a group and we're only printing this and there are no flags, don't print a header.
+	if !(single && len(c.subs) > 0 && c.numFlags() == 0) {
 		h := c.usageHeader()
 		if single && len(h)+len(c.Usage) <= 76 {
 			fmt.Fprintf(w, "%s    %s\n", h, c.Usage)
@@ -94,22 +94,19 @@ func (c *Command) usage(w io.Writer, single bool) {
 }
 
 func (c *Command) fullName() string {
-	if c.super == nil {
-		s := c.Name
-		if c.numFlags() > 0 {
-			s += " [flags]"
-		}
-		return s
+	name := c.Name
+	if c.numFlags() > 0 {
+		name += " [flags]"
 	}
-	return c.super.fullName() + " " + c.Name
+	if c.super == nil {
+		return name
+	}
+	return c.super.fullName() + " " + name
 }
 
 func (c *Command) usageHeader() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s", c.fullName())
-	if c.numFlags() > 0 {
-		fmt.Fprint(&b, " [flags]")
-	}
+	fmt.Fprint(&b, c.fullName())
 	for _, f := range c.formals {
 		fmt.Fprintf(&b, " %s", f.name)
 		if f.min >= 0 {

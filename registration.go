@@ -87,19 +87,6 @@ func (c *Command) findSub(name string) *Command {
 	return nil
 }
 
-// func newCmd(name string, x interface{}, doc string) *Command {
-// 	cmd := &Cmd{
-// 		name:  name,
-// 		c:     x,
-// 		doc:   doc,
-// 		flags: flag.NewFlagSet(name, flag.ContinueOnError),
-// 	}
-// 	cmd.flags.Usage = func() {
-// 		cmd.usage(cmd.flags.Output(), true)
-// 	}
-// 	return cmd
-// }
-
 func (c *Command) processFields() error {
 	if c.Struct == nil {
 		return nil
