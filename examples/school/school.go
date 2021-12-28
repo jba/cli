@@ -12,8 +12,10 @@ import (
 	"github.com/jba/cli"
 )
 
+var top = cli.Top(nil)
+
 func main() {
-	os.Exit(cli.Main(context.Background()))
+	os.Exit(top.Main(context.Background()))
 }
 
 type Student struct {
@@ -38,11 +40,11 @@ var courses = []*Course{
 }
 
 func init() {
-	cmd := cli.Register("students", &studentsGroup{}, "commands for students")
+	cmd := top.Register("students", nil, "commands for students")
 	cmd.Register("list", &studentsList{}, "list students")
 	cmd.Register("show", &studentsShow{}, "show a single student")
 
-	cmd = cli.Register("courses", &coursesGroup{}, "commands for courses")
+	cmd = top.Register("courses", &coursesGroup{}, "commands for courses")
 	cmd.Register("list", &coursesList{}, "list courses")
 	cmd.Register("show", &coursesShow{}, "show some courses")
 }

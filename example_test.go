@@ -26,10 +26,6 @@ type show struct {
 	Floats []float64 `cli:"name=numbers, float values"`
 }
 
-func init() {
-	cli.Register("show", &show{}, "show a thing")
-}
-
 func (c *show) Run(ctx context.Context) error {
 	fmt.Printf("showing %s, %v\n", c.ID, c.Floats)
 	if c.Verbose {
@@ -45,7 +41,10 @@ func (c *show) Run(ctx context.Context) error {
 }
 
 func Example_show() {
-	cli.RunTest("show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4")
+	top := cli.Top(&cli.Command{})
+	top.Register("show", &show{}, "show a thing")
+
+	must(top.Run(context.Background(), []string{"show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4"}))
 
 	// Output:
 	// showing abc, [3.2 -4]
@@ -68,11 +67,13 @@ func (x *opts) Run(ctx context.Context) error {
 }
 
 func Example_opts() {
+	ctx := context.Background()
 	c := &opts{}
-	cli.Register("opts", c, "optional args")
-	cli.RunTest("opts", "req", "o1", "o2")
+	top := cli.Top(&cli.Command{})
+	top.Register("opts", c, "optional args")
+	must(top.Run(ctx, []string{"opts", "req", "o1", "o2"}))
 	*c = opts{}
-	cli.RunTest("opts", "req")
+	must(top.Run(ctx, []string{"opts", "req"}))
 
 	// Output:
 	// &{Req:req Opt1:o1 Opt2:o2}
@@ -91,10 +92,11 @@ type subs_b struct {
 	B int
 }
 
-var subsCmd *cli.Cmd
+var top, subsCmd *cli.Command
 
 func init() {
-	subsCmd = cli.Register("subs", &subs{}, "doc for subs")
+	top = cli.Top(&cli.Command{})
+	subsCmd = top.Register("subs", &subs{}, "doc for subs")
 	subsCmd.Register("a", &subs_a{}, "doc for a")
 	subsCmd.Register("b", &subs_b{}, "doc for b")
 }
@@ -116,9 +118,10 @@ func must(err error) {
 }
 
 func Example_subs() {
-	must(cli.RunTest("subs", "a", "3"))
-	must(cli.RunTest("subs", "b", "2"))
-	fmt.Println(cli.RunTest("subs"))
+	ctx := context.Background()
+	must(top.Run(ctx, []string{"subs", "a", "3"}))
+	must(top.Run(ctx, []string{"subs", "b", "2"}))
+	fmt.Println(top.Run(ctx, []string{"subs"}))
 
 	// Output:
 	// a &{3}

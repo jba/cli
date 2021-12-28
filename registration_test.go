@@ -70,7 +70,7 @@ func TestParseTag(t *testing.T) {
 			wantDoc:  "doc",
 		},
 	} {
-		c := newCmd("", nil, "")
+		c := initFlags(&Command{})
 		err := c.parseTag(test.tag, sf, f)
 		if err != nil {
 			if !test.wantErr {
@@ -81,8 +81,8 @@ func TestParseTag(t *testing.T) {
 			if got.name != test.wantName {
 				t.Errorf("%q, name: got %q, want %q", test.tag, got.name, test.wantName)
 			}
-			if got.doc != test.wantDoc {
-				t.Errorf("%q, doc: got %q, want %q", test.tag, got.doc, test.wantDoc)
+			if got.usage != test.wantDoc {
+				t.Errorf("%q, doc: got %q, want %q", test.tag, got.usage, test.wantDoc)
 			}
 			gotp, err := got.parser("ga")
 			if err != nil {
@@ -97,7 +97,7 @@ func TestParseTag(t *testing.T) {
 func TestProcessFieldsErrors(t *testing.T) {
 	check := func(s interface{}, want string) {
 		t.Helper()
-		got := newCmd("", nil, "").processFields(s)
+		got := (&Command{Struct: s}).processFields()
 		if got == nil || !strings.Contains(got.Error(), want) {
 			t.Errorf("got %v, want error containing %q", got, want)
 		}
@@ -126,11 +126,11 @@ func TestProcessFieldsErrors(t *testing.T) {
 	type t4 struct {
 		A int
 	}
-	cmd := newCmd("", nil, "")
-	if err := cmd.processFields(&t4{}); err != nil {
+	cmd := &Command{Struct: &t4{}}
+	if err := cmd.processFields(); err != nil {
 		t.Fatal(err)
 	}
-	_, got := cmd.register("sub", &sub{}, "")
+	got := cmd.register(&Command{Name: "sub", Struct: &sub{}})
 	want := "cannot have both"
 	if got == nil || !strings.Contains(got.Error(), want) {
 		t.Errorf("got %v, want error containing %q", got, want)
@@ -267,7 +267,7 @@ func TestBindFormals(t *testing.T) {
 			f2 = ""
 			f3 = ""
 			r = nil
-			c := newCmd("", nil, "")
+			c := initFlags(&Command{})
 			got := c.bindFormals(test.formals, test.args)
 			if got == nil && test.wantErr != "" {
 				t.Error("got no error, wanted one")
@@ -286,7 +286,7 @@ func TestFlagUsage(t *testing.T) {
 	type s struct {
 		File string "flag=in, input `filename` for input"
 	}
-	cmd := Register("s", &s{}, "")
+	cmd := Top(&Command{Struct: &s{}})
 	f := cmd.flags.Lookup("in")
 	if f == nil {
 		t.Fatal("flag is nil")

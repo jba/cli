@@ -16,24 +16,18 @@ import (
 // Main invokes a command using the program's command-line arguments, passing it
 // the given context. It returns the exit code for the process. Typical use:
 //
-//     os.Exit(cli.Main(context.Background()))
-func Main(ctx context.Context) int {
-	return mainWithArgs(ctx, os.Args[1:])
+//     var top = cli.Top(&cli.Command{...})
+//     os.Exit(top.Main(context.Background()))
+func (c *Command) Main(ctx context.Context) int {
+	return c.mainWithArgs(ctx, os.Args[1:])
 }
 
-func mainWithArgs(ctx context.Context, args []string) int {
-	validateAll()
-	flag.Usage = func() {
-		topCmd.usage(flag.CommandLine.Output(), true)
+// Separated for testing.
+func (c *Command) mainWithArgs(ctx context.Context, args []string) int {
+	if err := c.validateAll(); err != nil {
+		panic(err)
 	}
-	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
-	if err := flag.CommandLine.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		return 2
-	}
-	if err := topCmd.Run(ctx, args); err != nil {
+	if err := c.Run(ctx, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -47,40 +41,12 @@ func mainWithArgs(ctx context.Context, args []string) int {
 	return 0
 }
 
-func validateAll() {
-	var validate func(*Cmd)
-	validate = func(c *Cmd) {
-		if err := c.validate(); err != nil {
-			panic(err)
-		}
-		for _, s := range c.subs {
-			validate(s)
-		}
-	}
-	validate(topCmd)
-}
-
-func (c *Cmd) Run(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return &UsageError{c, errors.New("no arguments")}
-	}
-	return c.findAndRun(ctx, args)
-}
-
-func (c *Cmd) findAndRun(ctx context.Context, args []string) error {
+func (c *Command) Run(ctx context.Context, args []string) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
-	subc := c.findSub(args[0])
-	if subc == nil {
-		return &UsageError{c, fmt.Errorf("unknown command: %q", args[0])}
-	}
-	return subc.run(ctx, args[1:])
-}
-
-func (c *Cmd) run(ctx context.Context, args []string) error {
 	if err := c.flags.Parse(args); err != nil {
-		return err
+		return &UsageError{c, err}
 	}
 	if c.flags.NArg() > 0 && len(c.subs) > 0 {
 		// There are more args and there are sub-commands, so run a sub-command.
@@ -89,8 +55,8 @@ func (c *Cmd) run(ctx context.Context, args []string) error {
 	if err := c.bindFormals(c.formals, c.flags.Args()); err != nil {
 		return err
 	}
-	if com, ok := c.c.(Command); ok {
-		err := com.Run(ctx)
+	if r, ok := c.Struct.(Runnable); ok {
+		err := r.Run(ctx)
 		var uerr *UsageError
 		if errors.As(err, &uerr) {
 			uerr.cmd = c
@@ -101,11 +67,15 @@ func (c *Cmd) run(ctx context.Context, args []string) error {
 	return &UsageError{c, errors.New("missing sub-command")}
 }
 
-func RunTest(args ...string) error {
-	return topCmd.Run(context.Background(), args)
+func (c *Command) findAndRun(ctx context.Context, args []string) error {
+	subc := c.findSub(args[0])
+	if subc == nil {
+		return &UsageError{c, fmt.Errorf("unknown command: %q", args[0])}
+	}
+	return subc.Run(ctx, args[1:])
 }
 
-func (c *Cmd) bindFormals(formals []*formal, args []string) error {
+func (c *Command) bindFormals(formals []*formal, args []string) error {
 	a := 0 // index into args
 	for i, f := range formals {
 		if f.min >= 0 {

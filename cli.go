@@ -11,57 +11,73 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"reflect"
 	"strings"
 )
 
-type Command interface {
+type Command struct {
+	Name   string
+	Struct interface{}
+	Usage  string
+
+	flags   *flag.FlagSet
+	formals []*formal
+	super   *Command
+	subs    []*Command
+}
+
+// A formal describes a positional argument.
+type formal struct {
+	name   string        // display name
+	field  reflect.Value // "pointer" to corresponding field
+	usage  string
+	min    int       // for last slice, minimum args needed
+	opt    bool      // if true, this and all following formals are optional
+	parser parseFunc // convert and/or validate
+}
+
+type Runnable interface {
 	Run(ctx context.Context) error
 }
 
-type Cmd struct {
-	name    string
-	c       interface{} // either Command, or a pure group
-	doc     string
-	flags   *flag.FlagSet
-	formals []*formal
-	super   *Cmd
-	subs    []*Cmd
-}
-
-var topCmd = &Cmd{
-	name:  filepath.Base(os.Args[0]),
-	flags: flag.CommandLine,
-}
-
-func (c *Cmd) validate() error {
+func (c *Command) validate() error {
 	// Check that c.c is either a Command, or has sub-commands.
-	if _, ok := c.c.(Command); !ok && len(c.subs) == 0 {
-		return fmt.Errorf("%s is not a Command and has no sub-commands", c.name)
+	if _, ok := c.Struct.(Runnable); !ok && len(c.subs) == 0 {
+		return fmt.Errorf("%s is not runnable and has no sub-commands", c.Name)
 	}
 	return nil
 }
 
-func (c *Cmd) usage(w io.Writer, single bool) {
+func (c *Command) validateAll() error {
+	if err := c.validate(); err != nil {
+		return err
+	}
+	for _, s := range c.subs {
+		if err := s.validateAll(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Command) usage(w io.Writer, single bool) {
 	if single {
 		fmt.Fprintln(w, "Usage:")
 	}
 	// If this is a group and we're only printing this, don't print a header.
 	if !(single && len(c.subs) > 0) {
 		h := c.usageHeader()
-		if single && len(h)+len(c.doc) <= 76 {
-			fmt.Fprintf(w, "%s    %s\n", h, c.doc)
+		if single && len(h)+len(c.Usage) <= 76 {
+			fmt.Fprintf(w, "%s    %s\n", h, c.Usage)
 		} else {
-			fmt.Fprintf(w, "%s\n  %s\n", h, c.doc)
+			fmt.Fprintf(w, "%s\n  %s\n", h, c.Usage)
 		}
 		for _, f := range c.formals {
-			if f.doc != "" {
-				fmt.Fprintf(w, "  %-10s %s\n", f.name, f.doc)
+			if f.usage != "" {
+				fmt.Fprintf(w, "  %-10s %s\n", f.name, f.usage)
 			}
 		}
 	}
@@ -77,18 +93,18 @@ func (c *Cmd) usage(w io.Writer, single bool) {
 	}
 }
 
-func (c *Cmd) fullName() string {
+func (c *Command) fullName() string {
 	if c.super == nil {
-		s := c.name
+		s := c.Name
 		if c.numFlags() > 0 {
 			s += " [flags]"
 		}
 		return s
 	}
-	return c.super.fullName() + " " + c.name
+	return c.super.fullName() + " " + c.Name
 }
 
-func (c *Cmd) usageHeader() string {
+func (c *Command) usageHeader() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s", c.fullName())
 	if c.numFlags() > 0 {
@@ -103,7 +119,7 @@ func (c *Cmd) usageHeader() string {
 	return b.String()
 }
 
-func (c *Cmd) numFlags() int {
+func (c *Command) numFlags() int {
 	n := 0
 	c.flags.VisitAll(func(*flag.Flag) { n++ })
 	return n
@@ -111,7 +127,7 @@ func (c *Cmd) numFlags() int {
 
 // UsageError is an error in how the command is invoked.
 type UsageError struct {
-	cmd *Cmd
+	cmd *Command
 	Err error
 }
 
@@ -121,10 +137,7 @@ func NewUsageError(err error) *UsageError {
 
 func (u *UsageError) Error() string {
 	var b strings.Builder
-	if errors.Is(u.Err, flag.ErrHelp) {
-		fmt.Printf("################ help\n")
-	}
-	fmt.Fprintf(&b, "%s: %v\n", u.cmd.name, u.Err.Error())
+	fmt.Fprintf(&b, "%s: %v\n", u.cmd.Name, u.Err.Error())
 	u.cmd.usage(&b, true)
 	s := b.String()
 	return s[:len(s)-1] // trim final newline

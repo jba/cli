@@ -1,5 +1,5 @@
 $ school --> FAIL
-school: no arguments
+school: missing sub-command
 Usage:
 school students
   commands for students

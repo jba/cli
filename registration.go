@@ -6,6 +6,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -14,71 +16,97 @@ import (
 
 // Code to register and prepare commands.
 
-// The second arg should can be a Command, or if not then it's a group.
-func Register(name string, x interface{}, doc string) *Cmd {
-	return topCmd.Register(name, x, doc)
+// Top prepares its argument to be the top-level command of a program,
+// then returns it.
+func Top(c *Command) *Command {
+	if c == nil {
+		c = &Command{}
+	}
+	if c.Name == "" {
+		c.Name = filepath.Base(os.Args[0])
+	}
+	c.flags = flag.CommandLine
+	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
+	flag.Usage = func() {
+		c.usage(c.flags.Output(), true)
+	}
+	c.processFields()
+	return c
+}
+
+func (c *Command) Register(name string, str interface{}, usage string) *Command {
+	return c.RegisterCommand(&Command{
+		Name:   name,
+		Struct: str,
+		Usage:  usage,
+	})
 }
 
 // Register a sub-command or sub-group of c.
-func (c *Cmd) Register(name string, x interface{}, doc string) *Cmd {
-	cmd, err := c.register(name, x, doc)
-	if err != nil {
+// The second arg should can be a Command, or if not then it's a group.
+func (c *Command) RegisterCommand(sub *Command) *Command {
+	if err := c.register(sub); err != nil {
 		panic(err)
 	}
-	return cmd
+	return sub
 }
 
-func (c *Cmd) register(name string, x interface{}, doc string) (*Cmd, error) {
+func initFlags(c *Command) *Command {
+	c.flags = flag.NewFlagSet(c.Name, flag.ContinueOnError)
+	c.flags.Usage = func() {
+		c.usage(c.flags.Output(), true)
+	}
+	return c
+}
+
+func (c *Command) register(sub *Command) error {
+	if sub.Name == "" {
+		return fmt.Errorf("sub-command of %s has no name", c.Name)
+	}
+	initFlags(sub)
 	if len(c.formals) > 0 {
-		return nil, fmt.Errorf("%s: a command cannot have both arguments and sub-commands", c.name)
+		return fmt.Errorf("%s: a command cannot have both arguments and sub-commands", c.Name)
 	}
-	if c.findSub(name) != nil {
-		return nil, fmt.Errorf("duplicate sub-command: %q", name)
+	if c.findSub(sub.Name) != nil {
+		return fmt.Errorf("duplicate sub-command: %q", sub.Name)
 	}
-	sub := newCmd(name, x, strings.TrimSpace(doc))
-	if err := sub.processFields(x); err != nil {
-		return nil, err
+	if err := sub.processFields(); err != nil {
+		return err
 	}
 	c.subs = append(c.subs, sub)
 	sub.super = c
-	return sub, nil
+	return nil
 }
 
-func (c *Cmd) findSub(name string) *Cmd {
+func (c *Command) findSub(name string) *Command {
 	for _, c := range c.subs {
-		if c.name == name {
+		if c.Name == name {
 			return c
 		}
 	}
 	return nil
 }
 
-func newCmd(name string, x interface{}, doc string) *Cmd {
-	cmd := &Cmd{
-		name:  name,
-		c:     x,
-		doc:   doc,
-		flags: flag.NewFlagSet(name, flag.ContinueOnError),
-	}
-	cmd.flags.Usage = func() {
-		cmd.usage(cmd.flags.Output(), true)
-	}
-	return cmd
-}
+// func newCmd(name string, x interface{}, doc string) *Command {
+// 	cmd := &Cmd{
+// 		name:  name,
+// 		c:     x,
+// 		doc:   doc,
+// 		flags: flag.NewFlagSet(name, flag.ContinueOnError),
+// 	}
+// 	cmd.flags.Usage = func() {
+// 		cmd.usage(cmd.flags.Output(), true)
+// 	}
+// 	return cmd
+// }
 
-type formal struct {
-	name   string        // display name
-	field  reflect.Value // "pointer" to field to set
-	doc    string
-	min    int       // for last slice, minimum args needed
-	opt    bool      // if true, this and all following formals are optional
-	parser parseFunc // convert and/or validate
-}
-
-func (c *Cmd) processFields(x interface{}) error {
-	v := reflect.ValueOf(x)
+func (c *Command) processFields() error {
+	if c.Struct == nil {
+		return nil
+	}
+	v := reflect.ValueOf(c.Struct)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("%T is not a pointer to a struct", x)
+		return fmt.Errorf("%s.Struct: %T is not a pointer to a struct", c.Name, c.Struct)
 	}
 	v = v.Elem()
 	t := v.Type()
@@ -91,7 +119,7 @@ func (c *Cmd) processFields(x interface{}) error {
 			tag = string(f.Tag)
 		}
 		if err := c.parseTag(tag, f, v.Field(i)); err != nil {
-			return fmt.Errorf("command %q, field %q: %v", c.name, f.Name, err)
+			return fmt.Errorf("command %q, field %q: %v", c.Name, f.Name, err)
 		}
 	}
 	for i, f := range c.formals {
@@ -119,7 +147,7 @@ var validKeys = map[string]bool{
 // - oneof=a|b|c, which which validate that the arg is one of those strings.
 // A full example:
 //   Env `cli:"name=env, oneof=dev|prod, development environment"`
-func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) error {
+func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Value) error {
 	if tag != "" && !sf.IsExported() {
 		return errors.New("cli tag on unexported field")
 	}
@@ -178,7 +206,7 @@ func (c *Cmd) parseTag(tag string, sf reflect.StructField, field reflect.Value) 
 		f := &formal{
 			name:   name,
 			field:  field,
-			doc:    m["doc"],
+			usage:  m["doc"],
 			min:    -1,
 			opt:    opt,
 			parser: parser,
