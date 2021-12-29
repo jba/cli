@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// Code to register and prepare commands.
+// Registering and preparing commands.
 
 // Top prepares its argument to be the top-level command of a program,
 // then returns it.
@@ -34,18 +34,18 @@ func Top(c *Command) *Command {
 	return c
 }
 
-// Register constructs a Command with the Name, Struct and Usage fields populated,
-// then calls RegisterCommand.
-func (c *Command) Register(name string, str interface{}, usage string) *Command {
-	return c.RegisterCommand(&Command{
+// Command constructs a Command with the Name, Struct and Usage fields populated,
+// then calls Register.
+func (c *Command) Command(name string, str interface{}, usage string) *Command {
+	return c.Register(&Command{
 		Name:   name,
 		Struct: str,
 		Usage:  usage,
 	})
 }
 
-// RegisterCommand registers a sub-command of the receiver Command.
-func (c *Command) RegisterCommand(sub *Command) *Command {
+// Register registers a sub-command of the receiver Command.
+func (c *Command) Register(sub *Command) *Command {
 	if err := c.register(sub); err != nil {
 		panic(err)
 	}

@@ -42,7 +42,7 @@ func (c *show) Run(ctx context.Context) error {
 
 func Example_show() {
 	top := cli.Top(&cli.Command{})
-	top.Register("show", &show{}, "show a thing")
+	top.Command("show", &show{}, "show a thing")
 
 	must(top.Run(context.Background(), []string{"show", "-v", "-bun", "-limit", "8", "-nums", "1,2,3", "-envs", "d,s,p", "abc", "3.2", "-4"}))
 
@@ -70,7 +70,7 @@ func Example_opts() {
 	ctx := context.Background()
 	c := &opts{}
 	top := cli.Top(&cli.Command{})
-	top.Register("opts", c, "optional args")
+	top.Command("opts", c, "optional args")
 	must(top.Run(ctx, []string{"opts", "req", "o1", "o2"}))
 	*c = opts{}
 	must(top.Run(ctx, []string{"opts", "req"}))
@@ -96,9 +96,9 @@ var top, subsCmd *cli.Command
 
 func init() {
 	top = cli.Top(nil)
-	subsCmd = top.Register("subs", &subs{}, "doc for subs")
-	subsCmd.Register("a", &subs_a{}, "doc for a")
-	subsCmd.Register("b", &subs_b{}, "doc for b")
+	subsCmd = top.Command("subs", &subs{}, "doc for subs")
+	subsCmd.Command("a", &subs_a{}, "doc for a")
+	subsCmd.Command("b", &subs_b{}, "doc for b")
 }
 
 func (s *subs_a) Run(ctx context.Context) error {

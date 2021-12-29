@@ -20,8 +20,8 @@ func TestExitCode(t *testing.T) {
 		F int `cli:"flag="`
 	}
 	top := Top(&Command{Struct: &c{}})
-	top.Register("com", &c{}, "com usage").
-		Register("sub", &suberr{}, "")
+	top.Command("com", &c{}, "com usage").
+		Command("sub", &suberr{}, "")
 
 	for _, test := range []struct {
 		args []string

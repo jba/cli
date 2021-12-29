@@ -40,13 +40,13 @@ var courses = []*Course{
 }
 
 func init() {
-	cmd := top.Register("students", nil, "commands for students")
-	cmd.Register("list", &studentsList{}, "list students")
-	cmd.Register("show", &studentsShow{}, "show a single student")
+	cmd := top.Command("students", nil, "commands for students")
+	cmd.Command("list", &studentsList{}, "list students")
+	cmd.Command("show", &studentsShow{}, "show a single student")
 
-	cmd = top.Register("courses", &coursesGroup{}, "commands for courses")
-	cmd.Register("list", &coursesList{}, "list courses")
-	cmd.Register("show", &coursesShow{}, "show some courses")
+	cmd = top.Command("courses", &coursesGroup{}, "commands for courses")
+	cmd.Command("list", &coursesList{}, "list courses")
+	cmd.Command("show", &coursesShow{}, "show some courses")
 }
 
 // The "students" command group
@@ -87,7 +87,9 @@ func (c *studentsShow) Run(ctx context.Context) error {
 
 }
 
-type coursesGroup struct{}
+type coursesGroup struct {
+	Limit int "cli:\"flag=, maximum `number` of results\""
+}
 
 type coursesList struct{}
 

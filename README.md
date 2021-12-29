@@ -11,5 +11,5 @@ virtually eliminates the painful boilerplate of checking the number of arguments
 and then parsing the strings. Instead, one defines a struct with fields of the
 desired types, and the struct's Run method has those fields at hand, assigned
 and validated. I've only seen this idea in one other package,
-[github.com/mkideal/cli](https://pkg.go.dev/github.com/mkideal/cli), but it is
-only applied to flags, not positional arguments.
+[github.com/mkideal/cli](https://pkg.go.dev/github.com/mkideal/cli), but there
+it is only applied to flags, not positional arguments.

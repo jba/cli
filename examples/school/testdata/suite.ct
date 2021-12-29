@@ -4,16 +4,22 @@ Usage:
 school students
   commands for students
 
-school courses
+school courses [flags]
   commands for courses
+  -limit number
+    	maximum number of results
+
 
 $ school -h
 Usage:
 school students
   commands for students
 
-school courses
+school courses [flags]
   commands for courses
+  -limit number
+    	maximum number of results
+
 
 
 $ school students --> FAIL
@@ -56,18 +62,24 @@ GPA: 4
 $ school courses --> FAIL
 courses: missing sub-command
 Usage:
-school courses list
+school courses [flags]    commands for courses
+  -limit number
+    	maximum number of results
+school courses [flags] list
   list courses
 
-school courses show NAMES...
+school courses [flags] show NAMES...
   show some courses
 
 $ school courses -h
 Usage:
-school courses list
+school courses [flags]    commands for courses
+  -limit number
+    	maximum number of results
+school courses [flags] list
   list courses
 
-school courses show NAMES...
+school courses [flags] show NAMES...
   show some courses
 
 $ school courses list
