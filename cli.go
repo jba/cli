@@ -77,7 +77,8 @@ func (c *Command) usage(w io.Writer, single bool) {
 		fmt.Fprintln(w, "Usage:")
 	}
 	// If this is a group and we're only printing this and there are no flags, don't print a header.
-	if !(single && len(c.subs) > 0 && c.numFlags() == 0) {
+	printHeader := !(single && len(c.subs) > 0 && c.numFlags() == 0)
+	if printHeader {
 		h := c.usageHeader()
 		if single && len(h)+len(c.Usage) <= 76 {
 			fmt.Fprintf(w, "%s    %s\n", h, c.Usage)
@@ -93,6 +94,9 @@ func (c *Command) usage(w io.Writer, single bool) {
 	c.flags.SetOutput(w)
 	c.flags.PrintDefaults()
 	if single {
+		if printHeader && len(c.subs) > 0 {
+			fmt.Fprintln(w)
+		}
 		for i, s := range c.subs {
 			if i > 0 {
 				fmt.Fprintln(w)

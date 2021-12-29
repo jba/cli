@@ -21,7 +21,7 @@ func Test(t *testing.T) {
 	} else if err != nil {
 		t.Fatal(err)
 	}
-	ts, err := cmdtest.Read("testdata")
+	ts, err := cmdtest.Read(".")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,7 +26,6 @@ func Top(c *Command) *Command {
 		c.Name = filepath.Base(os.Args[0])
 	}
 	c.flags = flag.CommandLine
-	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
 	flag.Usage = func() {
 		c.usage(c.flags.Output(), true)
 	}
@@ -139,8 +138,8 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 	if tag != "" && !sf.IsExported() {
 		return errors.New("cli tag on unexported field")
 	}
-	m := tagToMap(tag)
-	for k := range m {
+	tagMap := tagToMap(tag)
+	for k := range tagMap {
 		if k == "" {
 			return errors.New("empty key")
 		}
@@ -148,18 +147,18 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 			return fmt.Errorf("invalid key: %q", k)
 		}
 	}
-	_, isFlag := m["flag"]
-	if isFlag && m["name"] != "" {
+	_, isFlag := tagMap["flag"]
+	if isFlag && tagMap["name"] != "" {
 		return errors.New("either 'flag' or 'name', but not both")
 	}
-	if _, isOpt := m["opt"]; isOpt && isFlag {
+	if _, isOpt := tagMap["opt"]; isOpt && isFlag {
 		return errors.New("either 'flag' or 'opt', but not both")
 	}
-	parser, err := buildParser(field.Type(), m)
+	parser, err := buildParser(field.Type(), tagMap)
 	if err != nil {
 		return err
 	}
-	if fname, ok := m["flag"]; ok {
+	if fname, ok := tagMap["flag"]; ok {
 		// flag
 		if fname == "" {
 			fname = strings.ToLower(sf.Name)
@@ -169,11 +168,11 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 		}
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
-			c.flags.BoolVar(ptr, fname, *ptr, m["doc"])
+			c.flags.BoolVar(ptr, fname, *ptr, tagMap["doc"])
 		} else {
-			usage := m["doc"]
+			usage := tagMap["doc"]
 			if !field.IsZero() {
-				usage += fmt.Sprintf(" (default %v)", field)
+				usage += fmt.Sprintf(" (default %s)", formatDefault(field))
 			}
 			c.flags.Func(fname, usage, func(s string) error {
 				val, err := parser(s)
@@ -186,23 +185,23 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 		}
 	} else {
 		// positional arg
-		name := m["name"]
+		name := tagMap["name"]
 		if name == "" {
 			name = strings.ToUpper(sf.Name)
 		}
-		optVal, opt := m["opt"]
+		optVal, opt := tagMap["opt"]
 		if optVal != "" {
 			return errors.New(`"opt" should not have a value`)
 		}
 		f := &formal{
 			name:   name,
 			field:  field,
-			usage:  m["doc"],
+			usage:  tagMap["doc"],
 			min:    -1,
 			opt:    opt,
 			parser: parser,
 		}
-		minTag, hasMinTag := m["min"]
+		minTag, hasMinTag := tagMap["min"]
 		if sf.Type.Kind() == reflect.Slice {
 			f.min = 0
 			if hasMinTag {
@@ -248,4 +247,11 @@ func tagToMap(tag string) map[string]string {
 		m[key] = strings.TrimSpace(value)
 	}
 	return m
+}
+
+func formatDefault(v reflect.Value) string {
+	if v.Kind() == reflect.String {
+		return strconv.Quote(v.String())
+	}
+	return v.String()
 }

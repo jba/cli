@@ -65,6 +65,7 @@ Usage:
 school courses [flags]    commands for courses
   -limit number
     	maximum number of results
+
 school courses [flags] list
   list courses
 
@@ -76,6 +77,7 @@ Usage:
 school courses [flags]    commands for courses
   -limit number
     	maximum number of results
+
 school courses [flags] list
   list courses
 

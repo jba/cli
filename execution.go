@@ -32,6 +32,9 @@ func (c *Command) mainWithArgs(ctx context.Context, args []string) int {
 	if err := c.validateAll(); err != nil {
 		panic(err)
 	}
+	if c.flags == flag.CommandLine {
+		c.flags.Init(flag.CommandLine.Name(), flag.ContinueOnError)
+	}
 	if err := c.Run(ctx, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -54,6 +57,7 @@ func (c *Command) Run(ctx context.Context, args []string) error {
 	if err := c.flags.Parse(args); err != nil {
 		return &UsageError{c, err}
 	}
+
 	if c.flags.NArg() > 0 && len(c.subs) > 0 {
 		// There are more args and there are sub-commands, so run a sub-command.
 		subc := c.findSub(c.flags.Arg(0))
@@ -84,7 +88,14 @@ func (c *Command) bindFormals(formals []*formal, args []string) error {
 			// "Rest" arg. We've already checked that this is the last formal.
 			nArgsLeft := len(args) - i
 			if nArgsLeft < f.min {
-				return fmt.Errorf("%s: need at least %d args, got %d", f.name, f.min, nArgsLeft)
+				arg := "argument"
+				if f.min != 1 {
+					arg += "s"
+				}
+				return &UsageError{
+					cmd: c,
+					Err: fmt.Errorf("%s: need at least %d %s, got %d", f.name, f.min, arg, nArgsLeft),
+				}
 			}
 			slice := reflect.MakeSlice(f.field.Type(), 0, nArgsLeft)
 			for j := i; j < len(args); j++ {

@@ -131,6 +131,7 @@ func Example_subs() {
 	// cli.test [flags] subs [flags]    doc for subs
 	//   -f value
 	//     	a flag
+	//
 	// cli.test [flags] subs [flags] a A
 	//   doc for a
 	//
