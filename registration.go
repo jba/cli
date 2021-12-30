@@ -181,13 +181,18 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 		if fname[0] == '-' {
 			fname = fname[1:]
 		}
+		usage := strings.TrimSpace(tagMap["doc"])
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
-			c.flags.BoolVar(ptr, fname, *ptr, tagMap["doc"])
+			c.flags.BoolVar(ptr, fname, *ptr, usage)
 		} else {
-			usage := tagMap["doc"]
+			if field.Kind() == reflect.Slice {
+				usage = usage + "comma-separated list of " + usage
+			} else if choices != nil {
+				usage += "; one of " + strings.Join(choices, ", ")
+			}
 			if !field.IsZero() {
-				usage += fmt.Sprintf(" (default %s)", formatDefault(field))
+				usage += fmt.Sprintf(" (default %s)", formatDefault(field, choices != nil))
 			}
 			if choices != nil && field.Kind() != reflect.Slice {
 				c.flags.Var(&oneof{choices: choices}, fname, usage)
@@ -283,8 +288,8 @@ func prepareOneof(tagMap map[string]string) ([]string, error) {
 	return choices, nil
 }
 
-func formatDefault(v reflect.Value) string {
-	if v.Kind() == reflect.String {
+func formatDefault(v reflect.Value, isOneof bool) string {
+	if v.Kind() == reflect.String && !isOneof {
 		return strconv.Quote(v.String())
 	}
 	return v.String()
