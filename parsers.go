@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -16,22 +15,22 @@ import (
 // parseFunc is the type of functions that parse argument or flag strings into values.
 type parseFunc func(string) (interface{}, error)
 
-// buildParser constructs a parser for type t, using options in the tag map.
-func buildParser(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
-	if t.Kind() == reflect.Slice {
-		if _, isFlag := tagMap["flag"]; isFlag {
-			return parserForSlice(t, tagMap, ",")
-		}
-		return parserForType(t.Elem(), tagMap)
+// buildParser constructs a parser for type t, or for the list of choices.
+func buildParser(t reflect.Type, choices []string, isFlag bool) (parseFunc, error) {
+	if t.Kind() != reflect.Slice {
+		return parserForType(t, choices)
+	} else if isFlag {
+		return parserForSlice(t, choices, ",")
+	} else {
+		return parserForType(t.Elem(), choices)
 	}
-	return parserForType(t, tagMap)
 }
 
 // parserForSlice returns a parser for a string representing a slice of values.
 // t is the slice type.
 // sep separates elements in the string.
-func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parseFunc, error) {
-	elp, err := parserForType(t.Elem(), tagMap)
+func parserForSlice(t reflect.Type, choices []string, sep string) (parseFunc, error) {
+	elp, err := parserForType(t.Elem(), choices)
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +38,7 @@ func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parse
 		parts := strings.Split(s, sep)
 		slice := reflect.MakeSlice(t, len(parts), len(parts))
 		for i, p := range parts {
+			p = strings.TrimSpace(p)
 			el, err := elp(p)
 			if err != nil {
 				return nil, fmt.Errorf("%q: %v", p, err)
@@ -52,15 +52,12 @@ func parserForSlice(t reflect.Type, tagMap map[string]string, sep string) (parse
 var durationType = reflect.TypeOf(time.Duration(0))
 
 // parserForType returns a parser for scalar types.
-func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) {
-	if oneof, ok := tagMap["oneof"]; ok {
-		if oneof == "" {
-			return nil, errors.New("empty oneof")
-		}
+func parserForType(t reflect.Type, choices []string) (parseFunc, error) {
+	if choices != nil {
 		if t.Kind() != reflect.String {
 			return nil, fmt.Errorf("oneof must be string type, not %s", t)
 		}
-		return parserForOneof(strings.Split(oneof, "|")), nil
+		return parserForOneof(choices), nil
 	}
 	if t == durationType {
 		return func(s string) (interface{}, error) {
@@ -115,15 +112,10 @@ func parserForType(t reflect.Type, tagMap map[string]string) (parseFunc, error) 
 }
 
 func parserForOneof(choices []string) parseFunc {
-	for i := range choices {
-		choices[i] = strings.TrimSpace(choices[i])
-	}
 	return func(s string) (interface{}, error) {
-		for _, c := range choices {
-			if s == c {
-				return c, nil
-			}
+		if err := checkOneof(s, choices); err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("must be one of: %s", strings.Join(choices, ", "))
+		return s, nil
 	}
 }

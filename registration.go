@@ -154,7 +154,13 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 	if _, isOpt := tagMap["opt"]; isOpt && isFlag {
 		return errors.New("either 'flag' or 'opt', but not both")
 	}
-	parser, err := buildParser(field.Type(), tagMap)
+
+	// Check and prepare oneof.
+	choices, err := prepareOneof(tagMap)
+	if err != nil {
+		return err
+	}
+	parser, err := buildParser(field.Type(), choices, isFlag)
 	if err != nil {
 		return err
 	}
@@ -174,14 +180,18 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 			if !field.IsZero() {
 				usage += fmt.Sprintf(" (default %s)", formatDefault(field))
 			}
-			c.flags.Func(fname, usage, func(s string) error {
-				val, err := parser(s)
-				if err != nil {
-					return err
-				}
-				field.Set(reflect.ValueOf(val))
-				return nil
-			})
+			if choices != nil && field.Kind() != reflect.Slice {
+				c.flags.Var(&oneof{choices: choices}, fname, usage)
+			} else {
+				c.flags.Func(fname, usage, func(s string) error {
+					val, err := parser(s)
+					if err != nil {
+						return err
+					}
+					field.Set(reflect.ValueOf(val))
+					return nil
+				})
+			}
 		}
 	} else {
 		// positional arg
@@ -249,9 +259,59 @@ func tagToMap(tag string) map[string]string {
 	return m
 }
 
+func prepareOneof(tagMap map[string]string) ([]string, error) {
+	oneof, ok := tagMap["oneof"]
+	if !ok {
+		return nil, nil
+	}
+	if strings.TrimSpace(oneof) == "" {
+		return nil, errors.New("oneof value cannot be empty")
+	}
+	choices := strings.Split(oneof, "|")
+	for i := range choices {
+		choices[i] = strings.TrimSpace(choices[i])
+	}
+	return choices, nil
+}
+
 func formatDefault(v reflect.Value) string {
 	if v.Kind() == reflect.String {
 		return strconv.Quote(v.String())
 	}
 	return v.String()
+}
+
+// oneof implements flag.Value and github.com/posener/complete/v2.Predictor.
+type oneof struct {
+	choices []string
+	value   string
+}
+
+// String implements flag.Value
+func (f *oneof) String() string {
+	return f.value
+}
+
+// Set implements flag.Value
+func (f *oneof) Set(s string) error {
+	if err := checkOneof(s, f.choices); err != nil {
+		return err
+	}
+	f.value = s
+	return nil
+}
+
+func checkOneof(s string, choices []string) error {
+	for _, c := range choices {
+		if s == c {
+			return nil
+		}
+	}
+	return fmt.Errorf("must be one of: %s", strings.Join(choices, ", "))
+}
+
+// Predict implements complete.Predictor.
+func (f *oneof) Predict(string) []string {
+	// Ignore prefix; returned values are filtered by it anyway.
+	return f.choices
 }

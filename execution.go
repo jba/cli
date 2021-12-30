@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+
+	"github.com/posener/complete/v2"
 )
 
 // Code for running commands.
@@ -21,7 +23,7 @@ import (
 // Typically, Main is called on the top Command with the background context, and
 // its return value is passed to os.Exit, like so:
 //
-//     var top = cli.Top(&cli.Command{...})
+//     var top = cli.Top(nil)
 //     os.Exit(top.Main(context.Background()))
 func (c *Command) Main(ctx context.Context) int {
 	return c.mainWithArgs(ctx, os.Args[1:])
@@ -29,6 +31,7 @@ func (c *Command) Main(ctx context.Context) int {
 
 // Separated for testing.
 func (c *Command) mainWithArgs(ctx context.Context, args []string) int {
+	complete.Complete(os.Args[0], c)
 	if err := c.validateAll(); err != nil {
 		panic(err)
 	}

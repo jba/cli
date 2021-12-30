@@ -21,8 +21,8 @@ The command's logic is provided in a Run method:
   }
 
 Before the Run method is called, the command line flags and arguments are parsed
-and assigned to the fields of the receiver struct. 
-    
+and assigned to the fields of the receiver struct.
+
 
 Registration
 
@@ -81,10 +81,10 @@ The tag syntax is a comma-separated lists of key=value pairs. The keys are:
    - doc:   The value is the usage string. This key can be omitted when the usage string
             is last.
    - opt:   This and the following positional arguments are optional.
-   - oneof: The value is a list of strings separated by "|". The provided value must
-            match one of the given ones. A field with "oneof" must be of type string. 
+   - oneof: The value is a "|"-separated list of strings that the provided value
+            must match. A field with "oneof" must be of type string.
    - min:   For positional slice fields, the minimum number of arguments.
-   
+
 For example, the field and struct tag
 
    Environ string `cli:"name=env, oneof=dev|prod, development environment"`
@@ -118,5 +118,13 @@ init functions, then the entire main function can be
 
 For more control, you can call Command.Run with a context and a slice of arguments,
 and handle the error yourself.
+
+
+Completion
+
+Shell completion for common shells is supported with the
+github.com/posener/complete/v2 package. Completion logic is automatically
+invoked if your program calls Command.Main. To install completion for a program,
+run it with the COMP_INSTALL environment variable set to 1.
 */
 package cli

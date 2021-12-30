@@ -13,3 +13,15 @@ desired types, and the struct's Run method has those fields at hand, assigned
 and validated. I've only seen this idea in one other package,
 [github.com/mkideal/cli](https://pkg.go.dev/github.com/mkideal/cli), but there
 it is only applied to flags, not positional arguments.
+
+## Features
+
+- Define flags and arguments with struct field tags.
+
+- Nested commands.
+
+- Shell completion.
+
+- Multi-valued flags: parsing comma-separated flag values into a slice.
+
+- Oneofs: specify a list of valid strings for a flag or argument.
