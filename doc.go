@@ -37,7 +37,7 @@ flag package, so global flags can be defined as usual. The value of top is a
 *cli.Command.
 
 
-Subcommands are configured by registering a Command struct with an existing
+Sub-commands are configured by registering a Command struct with an existing
 Command. Given the compare struct and the top variable shown above, we can
 register a compare command with
 
@@ -107,7 +107,7 @@ bare struct tags that don't have the usual 'key:"value"' format, which makes thi
 
 Execution
 
-Once the top-level command has been created and all subcommands have been
+Once the top-level command has been created and all sub-commands have been
 registered, call the Main method to invoke the appropriate command and get back
 an exit code. If the other work has been done with a global "top" variable and
 init functions, then the entire main function can be

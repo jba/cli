@@ -53,6 +53,14 @@ func (c *Command) mainWithArgs(ctx context.Context, args []string) int {
 }
 
 // Run invokes the command on the arguments.
+//
+// If a command has both sub-commands and positional arguments, sub-commands
+// take precedence. For example, if command C has sub-command S, then the command
+// line
+//   C S A
+// will invoke S with argument A, while
+//   C T A
+// will invoke C with arguments T and A.
 func (c *Command) Run(ctx context.Context, args []string) error {
 	if err := c.validate(); err != nil {
 		return err
@@ -61,13 +69,16 @@ func (c *Command) Run(ctx context.Context, args []string) error {
 		return &UsageError{c, err}
 	}
 
-	if c.flags.NArg() > 0 && len(c.subs) > 0 {
-		// There are more args and there are sub-commands, so run a sub-command.
-		subc := c.findSub(c.flags.Arg(0))
-		if subc == nil {
-			return &UsageError{c, fmt.Errorf("unknown command: %q", c.flags.Arg(0))}
+	if c.flags.NArg() > 0 {
+		// There are command-line arguments. Prefer a sub-command if there is one.
+		if subc := c.findSub(c.flags.Arg(0)); subc != nil {
+			return subc.Run(ctx, c.flags.Args()[1:])
 		}
-		return subc.Run(ctx, c.flags.Args()[1:])
+		// If there are sub-commands but no formals, then the error should be
+		// that the sub-command is unknown, not that there are too many args.
+		if len(c.subs) > 0 && len(c.formals) == 0 {
+			return &UsageError{c, fmt.Errorf("unknown command %q", c.flags.Arg(0))}
+		}
 	}
 	if err := c.bindFormals(c.formals, c.flags.Args()); err != nil {
 		return err
@@ -115,7 +126,7 @@ func (c *Command) bindFormals(formals []*formal, args []string) error {
 				// This and all following args are optional, so we can skip.
 				return nil
 			}
-			return &UsageError{cmd: c, Err: errors.New("too few args")}
+			return &UsageError{cmd: c, Err: errors.New("too few arguments")}
 		} else {
 			v, err := f.parser(args[a])
 			if err != nil {
@@ -126,7 +137,7 @@ func (c *Command) bindFormals(formals []*formal, args []string) error {
 		}
 	}
 	if a < len(args) {
-		return &UsageError{cmd: c, Err: errors.New("too many args")}
+		return &UsageError{cmd: c, Err: errors.New("too many arguments")}
 	}
 	return nil
 }

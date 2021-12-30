@@ -53,7 +53,7 @@ type Runnable interface {
 }
 
 func (c *Command) validate() error {
-	// Check that c.c is either a Command, or has sub-commands.
+	// Check that c.c is either a Runnable, or has sub-commands.
 	if _, ok := c.Struct.(Runnable); !ok && len(c.subs) == 0 {
 		return fmt.Errorf("%s is not runnable and has no sub-commands", c.Name)
 	}

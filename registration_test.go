@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -126,11 +125,11 @@ func TestProcessFieldsErrors(t *testing.T) {
 	type t4 struct {
 		A int
 	}
-	cmd := &Command{Struct: &t4{}}
-	if err := cmd.processFields(); err != nil {
+	t4cmd := &Command{Struct: &t4{}}
+	if err := t4cmd.processFields(); err != nil {
 		t.Fatal(err)
 	}
-	got := cmd.register(&Command{Name: "sub", Struct: &sub{}})
+	got := t4cmd.register(&Command{Name: "sub", Struct: nil})
 	want := "cannot have both"
 	if got == nil || !strings.Contains(got.Error(), want) {
 		t.Errorf("got %v, want error containing %q", got, want)
@@ -138,12 +137,6 @@ func TestProcessFieldsErrors(t *testing.T) {
 
 }
 
-type sub struct {
-}
-
-func (sub) Run(context.Context) error {
-	return nil
-}
 func TestBindFormals(t *testing.T) {
 	var f1, f2, f3 string
 	var r []string

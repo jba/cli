@@ -4,13 +4,20 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 )
 
-type suberr struct{}
+type runnable struct {
+	run func(context.Context) error
+}
 
-func (suberr) Run(context.Context) error { return context.Canceled }
+func (r runnable) Run(ctx context.Context) error {
+	return r.run(ctx)
+}
+
+type suberr struct{ runnable }
 
 func TestExitCode(t *testing.T) {
 	defer func(f *os.File) { os.Stderr = f }(os.Stderr)
@@ -21,7 +28,9 @@ func TestExitCode(t *testing.T) {
 	}
 	top := Top(&Command{Struct: &c{}})
 	top.Command("com", &c{}, "com usage").
-		Command("sub", &suberr{}, "")
+		Command("sub", &suberr{runnable{func(context.Context) error {
+			return context.Canceled
+		}}}, "")
 
 	for _, test := range []struct {
 		args []string
@@ -40,6 +49,49 @@ func TestExitCode(t *testing.T) {
 		got := top.mainWithArgs(context.Background(), test.args)
 		if got != test.want {
 			t.Errorf("%v: got %d, want %d", test.args, got, test.want)
+		}
+	}
+}
+
+type (
+	c1 struct{ A int }
+	c2 struct{ B bool }
+)
+
+func (c *c1) Run(context.Context) error {
+	return fmt.Errorf("A=%d", c.A)
+}
+
+func (c *c2) Run(context.Context) error {
+	return fmt.Errorf("B=%t", c.B)
+}
+
+func TestRun(t *testing.T) {
+	top := Top(nil)
+	top.Command("c1", &c1{}, "").Command("c2", &c2{}, "")
+
+	ctx := context.Background()
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "missing sub-command"},
+		{[]string{"foo"}, `unknown command "foo"`},
+		{[]string{"c1"}, "too few arguments"},
+		{[]string{"c1", "3"}, "A=3"},
+		{[]string{"c1", "c2", "true"}, "B=true"},
+		{[]string{"c1", "c2"}, "too few arguments"},
+	} {
+		err := top.Run(ctx, test.args)
+		var got string
+		if err != nil {
+			got, _, _ = stringsCut(err.Error(), "\n")
+		}
+		if _, after, found := stringsCut(got, ": "); found {
+			got = after
+		}
+		if got != test.want {
+			t.Errorf("%v:\ngot %q\nwant %q", test.args, got, test.want)
 		}
 	}
 }

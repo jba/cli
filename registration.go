@@ -44,11 +44,36 @@ func (c *Command) Command(name string, str interface{}, usage string) *Command {
 }
 
 // Register registers a sub-command of the receiver Command.
+//
+// sub.Struct may implement Runnable. If it does not, then sub represents a
+// group of commands, not a command proper. In that case, it cannot have any
+// positional arguments (though it may have flags), and it must have
+// sub-commands.
 func (c *Command) Register(sub *Command) *Command {
 	if err := c.register(sub); err != nil {
 		panic(err)
 	}
 	return sub
+}
+
+func (c *Command) register(sub *Command) error {
+	if sub.Name == "" {
+		return fmt.Errorf("sub-command of %s has no name", c.Name)
+	}
+	initFlags(sub)
+	if c.findSub(sub.Name) != nil {
+		return fmt.Errorf("duplicate sub-command: %q", sub.Name)
+	}
+	if err := sub.processFields(); err != nil {
+		return err
+	}
+	if _, ok := sub.Struct.(Runnable); !ok && len(c.formals) > 0 {
+		return fmt.Errorf("sub-command %s of %s has positional arguments but is not runnable",
+			sub.Name, c.Name)
+	}
+	c.subs = append(c.subs, sub)
+	sub.super = c
+	return nil
 }
 
 func initFlags(c *Command) *Command {
@@ -57,25 +82,6 @@ func initFlags(c *Command) *Command {
 		c.usage(c.flags.Output(), true)
 	}
 	return c
-}
-
-func (c *Command) register(sub *Command) error {
-	if sub.Name == "" {
-		return fmt.Errorf("sub-command of %s has no name", c.Name)
-	}
-	initFlags(sub)
-	if len(c.formals) > 0 {
-		return fmt.Errorf("%s: a command cannot have both arguments and sub-commands", c.Name)
-	}
-	if c.findSub(sub.Name) != nil {
-		return fmt.Errorf("duplicate sub-command: %q", sub.Name)
-	}
-	if err := sub.processFields(); err != nil {
-		return err
-	}
-	c.subs = append(c.subs, sub)
-	sub.super = c
-	return nil
 }
 
 func (c *Command) findSub(name string) *Command {
@@ -137,6 +143,9 @@ var validKeys = map[string]bool{
 func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Value) error {
 	if tag != "" && !sf.IsExported() {
 		return errors.New("cli tag on unexported field")
+	}
+	if !sf.IsExported() {
+		return nil
 	}
 	tagMap := tagToMap(tag)
 	for k := range tagMap {
