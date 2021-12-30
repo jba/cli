@@ -61,14 +61,25 @@ func (c *Command) mainWithArgs(ctx context.Context, args []string) int {
 // will invoke S with argument A, while
 //   C T A
 // will invoke C with arguments T and A.
-func (c *Command) Run(ctx context.Context, args []string) error {
+func (c *Command) Run(ctx context.Context, args []string) (err error) {
+	defer func() {
+		var uerr *UsageError
+		if errors.As(err, &uerr) && uerr.cmd == nil {
+			uerr.cmd = c
+		}
+	}()
+
 	if err := c.validate(); err != nil {
 		return err
 	}
 	if err := c.flags.Parse(args); err != nil {
 		return &UsageError{c, err}
 	}
-
+	if b, ok := c.Struct.(interface{ Before(context.Context) error }); ok {
+		if err := b.Before(ctx); err != nil {
+			return err
+		}
+	}
 	if c.flags.NArg() > 0 {
 		// There are command-line arguments. Prefer a sub-command if there is one.
 		if subc := c.findSub(c.flags.Arg(0)); subc != nil {
@@ -84,12 +95,7 @@ func (c *Command) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	if r, ok := c.Struct.(Runnable); ok {
-		err := r.Run(ctx)
-		var uerr *UsageError
-		if errors.As(err, &uerr) {
-			uerr.cmd = c
-		}
-		return err
+		return r.Run(ctx)
 	}
 	// c is a group, but it is not a command.
 	return &UsageError{c, errors.New("missing sub-command")}

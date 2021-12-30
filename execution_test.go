@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -56,6 +57,7 @@ func TestExitCode(t *testing.T) {
 type (
 	c1 struct{ A int }
 	c2 struct{ B bool }
+	c3 struct{}
 )
 
 func (c *c1) Run(context.Context) error {
@@ -66,9 +68,18 @@ func (c *c2) Run(context.Context) error {
 	return fmt.Errorf("B=%t", c.B)
 }
 
+func (c *c3) Before(context.Context) error {
+	return errors.New("c3.Before")
+}
+
+func (c *c3) Run(context.Context) error {
+	return errors.New("should not be called")
+}
+
 func TestRun(t *testing.T) {
 	top := Top(nil)
 	top.Command("c1", &c1{}, "").Command("c2", &c2{}, "")
+	top.Command("c3", &c3{}, "")
 
 	ctx := context.Background()
 	for _, test := range []struct {
@@ -81,6 +92,7 @@ func TestRun(t *testing.T) {
 		{[]string{"c1", "3"}, "A=3"},
 		{[]string{"c1", "c2", "true"}, "B=true"},
 		{[]string{"c1", "c2"}, "too few arguments"},
+		{[]string{"c3"}, "c3.Before"},
 	} {
 		err := top.Run(ctx, test.args)
 		var got string

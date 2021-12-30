@@ -29,6 +29,9 @@ type Command struct {
 	// See the package documentation for the syntax of the struct tags.
 	// If the struct pointer implements Runnable, then it can be run
 	// as a command. Otherwise, it represents a group of sub-commands.
+	// If the struct pointer has a method Before(context.Context) error,
+	// it is called before arguments and sub-commands are processed. Flags
+	// will have been parsed.
 	Struct interface{}
 
 	flags   *flag.FlagSet
@@ -48,6 +51,7 @@ type formal struct {
 }
 
 // A Runnable is a command that can be run.
+// See Command.Struct.
 type Runnable interface {
 	Run(ctx context.Context) error
 }

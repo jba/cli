@@ -130,7 +130,7 @@ func TestProcessFieldsErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := t4cmd.register(&Command{Name: "sub", Struct: nil})
-	want := "cannot have both"
+	want := "is not runnable"
 	if got == nil || !strings.Contains(got.Error(), want) {
 		t.Errorf("got %v, want error containing %q", got, want)
 	}
