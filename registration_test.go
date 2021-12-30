@@ -36,7 +36,7 @@ func TestTagToMap(t *testing.T) {
 	}
 }
 
-func TestParseTag(t *testing.T) {
+func TestParseTagArgs(t *testing.T) {
 	type s struct {
 		F string
 	}
@@ -61,12 +61,12 @@ func TestParseTag(t *testing.T) {
 		{
 			tag:      "oneof=al|be|ga, some doc",
 			wantName: "F",
-			wantDoc:  "some doc",
+			wantDoc:  "some doc; one of al, be, ga",
 		},
 		{
 			tag:      "\toneof=ga | la,\tname=bar\t,doc\t",
 			wantName: "bar",
-			wantDoc:  "doc",
+			wantDoc:  "doc; one of ga, la",
 		},
 	} {
 		c := initFlags(&Command{})
@@ -89,6 +89,56 @@ func TestParseTag(t *testing.T) {
 			} else if wantp := "ga"; gotp != wantp {
 				t.Errorf("%q: got %v, want %v", test.tag, gotp, wantp)
 			}
+		}
+	}
+}
+
+func TestParseTagFlags(t *testing.T) {
+	type s struct {
+		F string
+	}
+	sf := reflect.TypeOf(s{}).Field(0)
+	f := reflect.ValueOf(s{}).Field(0)
+	for _, test := range []struct {
+		tag      string
+		wantName string
+		wantDoc  string
+		wantErr  bool
+	}{
+		{
+			tag:      "flag=f, doc",
+			wantName: "f",
+			wantDoc:  "doc",
+		},
+		{
+			tag:      "flag=Goo, more `doc`",
+			wantName: "Goo",
+			wantDoc:  "more `doc`",
+		},
+		{
+			tag:      "flag=, oneof=a|b|c, something",
+			wantName: "f",
+			wantDoc:  "something; one of a, b, c",
+		},
+	} {
+		c := initFlags(&Command{})
+		err := c.parseTag(test.tag, sf, f)
+		if err != nil {
+			if !test.wantErr {
+				t.Errorf("%q: unwanted error: <%v>", test.tag, err)
+			}
+			continue
+		}
+		got := c.flags.Lookup(test.wantName)
+		if got == nil {
+			t.Errorf("%q: no flag named %q", test.tag, test.wantName)
+			continue
+		}
+		if got.Name != test.wantName {
+			t.Errorf("%q, name: got %q, want %q", test.tag, got.Name, test.wantName)
+		}
+		if got.Usage != test.wantDoc {
+			t.Errorf("%q, doc: got %q, want %q", test.tag, got.Usage, test.wantDoc)
 		}
 	}
 }

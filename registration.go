@@ -169,6 +169,10 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 	if err != nil {
 		return err
 	}
+	usage := tagMap["doc"]
+	if choices != nil {
+		usage += "; one of " + strings.Join(choices, ", ")
+	}
 	parser, err := buildParser(field.Type(), choices, isFlag)
 	if err != nil {
 		return err
@@ -181,15 +185,12 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 		if fname[0] == '-' {
 			fname = fname[1:]
 		}
-		usage := strings.TrimSpace(tagMap["doc"])
 		if field.Kind() == reflect.Bool {
 			ptr := field.Addr().Convert(reflect.PtrTo(reflect.TypeOf(true))).Interface().(*bool)
 			c.flags.BoolVar(ptr, fname, *ptr, usage)
 		} else {
 			if field.Kind() == reflect.Slice {
 				usage = usage + "comma-separated list of " + usage
-			} else if choices != nil {
-				usage += "; one of " + strings.Join(choices, ", ")
 			}
 			if !field.IsZero() {
 				usage += fmt.Sprintf(" (default %s)", formatDefault(field, choices != nil))
@@ -220,7 +221,7 @@ func (c *Command) parseTag(tag string, sf reflect.StructField, field reflect.Val
 		f := &formal{
 			name:   name,
 			field:  field,
-			usage:  tagMap["doc"],
+			usage:  usage,
 			min:    -1,
 			opt:    opt,
 			parser: parser,
