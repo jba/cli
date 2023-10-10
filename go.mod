@@ -1,6 +1,6 @@
 module github.com/jba/cli
 
-go 1.18
+go 1.21
 
 require (
 	github.com/google/go-cmdtest v0.3.0
