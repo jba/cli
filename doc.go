@@ -46,7 +46,7 @@ register a compare command with
 
 or more succinctly,
 
-	top.Register("compare", &compare{}, "compare two files")
+	top.Command("compare", &compare{}, "compare two files")
 
 That code can be put in an init method or at the start of main.
 
