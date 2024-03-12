@@ -5,15 +5,13 @@ name: Go tests and checks
 on: push
 
 jobs:
-	gofmt:
-		runs-on: ubuntu-latest
-		steps:
-			- uses: actions/checkout@main
-			- uses: actions/setup-up@main
-			  with:
-				go-version: '1.21.x'
-			- run: go version
-			- run: go get .
-			- run: go test -v ./...
-			
-
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+      - uses: actions/setup-go@main
+        with:
+          go-version: '1.21.x'
+      - run: go version
+      - run: go get .
+      - run: go test -v ./...
